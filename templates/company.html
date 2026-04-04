@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ company }}{% endblock %}
+
+{% block content %}
+{% from "base.html" import score_badge %}
+
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Companies</a></li>
+    <li class="breadcrumb-item active">{{ jobs[0].company if jobs and jobs[0].company else company }}</li>
+  </ol>
+</nav>
+
+<div class="mb-4">
+  <div class="d-flex justify-content-between align-items-baseline">
+    <h2 class="mb-0">{{ jobs[0].company if jobs and jobs[0].company else company }}</h2>
+    <div class="d-flex align-items-center gap-3">
+      <span class="text-muted">{{ jobs | length }} role{{ 's' if jobs | length != 1 }}</span>
+      <select id="sort-select" class="form-select form-select-sm" style="width:auto"
+              onchange="sortJobs(this.value)">
+        <option value="score-desc">Score ↓</option>
+        <option value="score-asc">Score ↑</option>
+        <option value="title-asc">Title A→Z</option>
+        <option value="title-desc">Title Z→A</option>
+      </select>
+      <button class="btn btn-sm btn-outline-primary" {{ "disabled" if not can_score }}
+              title="{{ 'Upload a CV to enable scoring' if not can_score }}"
+              onclick="scoreAll('{{ company }}')">Score all vs CV</button>
+      <form action="/score/{{ company }}/clear" method="post" class="m-0">
+        <button class="btn btn-sm btn-outline-danger"
+                onclick="return confirm('Clear all scores for this company?')">Clear scores</button>
+      </form>
+    </div>
+  </div>
+  {% if company_info.description %}
+  <p class="text-muted mt-2 mb-0">{{ company_info.description }}</p>
+  {% endif %}
+</div>
+
+<div id="jobs-container">
+{% for job in jobs %}
+<div class="card job-card mb-3 shadow-sm position-relative"
+     data-score="{{ job._score.score if job._score else -1 }}"
+     data-title="{{ job.title | lower }}">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start">
+      <div class="flex-grow-1 me-3">
+        <div class="d-flex align-items-center gap-2 mb-1">
+          {{ score_badge(job._score, "fs-6 px-2 py-1") }}
+          <h5 class="mb-0">
+            <a href="/{{ company }}/{{ job._role_id }}" class="text-decoration-none text-dark stretched-link">
+              {{ job.title or '—' }}
+            </a>
+          </h5>
+        </div>
+        <div class="mb-2">
+          {% if job.location %}
+          <span class="badge badge-loc me-1">{{ job.location }}</span>
+          {% endif %}
+          {% if job.employment_type %}
+          <span class="badge badge-type me-1">{{ job.employment_type }}</span>
+          {% endif %}
+          {% if job.experience_level and job.experience_level != 'unspecified' %}
+          <span class="badge badge-level me-1">{{ job.experience_level }}</span>
+          {% endif %}
+          {% if job.salary and job.salary != 'null' %}
+          <span class="badge bg-light text-dark border">{{ job.salary }}</span>
+          {% endif %}
+        </div>
+        {% if job.summary %}
+        <p class="text-muted mb-1 small">{{ job.summary }}</p>
+        {% endif %}
+        {% if job._score %}
+        <p class="text-muted mb-0 small fst-italic">&#128269; {{ job._score.reasoning }}</p>
+        {% endif %}
+      </div>
+      <div class="d-flex gap-2 flex-shrink-0 position-relative" style="z-index:1">
+        <form action="/score/{{ company }}/{{ job._role_id }}" method="post" class="m-0">
+          <button class="btn btn-sm btn-outline-secondary" {{ "disabled" if not can_score }}
+                  title="{{ 'Upload a CV to enable scoring' if not can_score }}">{{ "Re-score" if job._score else "Score" }}</button>
+        </form>
+        {% if job._has_pdf %}
+        <a href="/{{ company }}/{{ job._role_id }}/pdf" target="_blank"
+           class="btn btn-sm btn-outline-secondary">PDF</a>
+        {% endif %}
+        <form action="/delete/{{ company }}/{{ job._role_id }}" method="post" class="m-0">
+          <button class="btn btn-sm btn-outline-danger"
+                  onclick="return confirm('Remove this job?')">&#128465;</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-info">No jobs found for this company.</div>
+{% endfor %}
+</div>
+
+<script>
+  function sortJobs(mode) {
+    const container = document.getElementById('jobs-container');
+    const cards = [...container.querySelectorAll('.job-card')];
+    cards.sort((a, b) => {
+      if (mode === 'score-desc') return b.dataset.score - a.dataset.score;
+      if (mode === 'score-asc')  return a.dataset.score - b.dataset.score;
+      if (mode === 'title-asc')  return a.dataset.title.localeCompare(b.dataset.title);
+      if (mode === 'title-desc') return b.dataset.title.localeCompare(a.dataset.title);
+    });
+    cards.forEach(c => container.appendChild(c));
+  }
+</script>
+{% endblock %}

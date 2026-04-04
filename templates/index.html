@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}All Companies{% endblock %}
+
+{% block content %}
+{% from "base.html" import score_badge %}
+
+<div class="row g-4">
+
+  {# ── Left sidebar ── #}
+  <div class="col-lg-3 col-md-4">
+    <div class="sticky-top pt-1" style="top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto;">
+      <div class="card shadow-sm">
+        <div class="card-header py-2">
+          <input id="company-filter" type="search" class="form-control form-control-sm"
+                 placeholder="Filter companies…" autocomplete="off">
+        </div>
+        <div class="list-group list-group-flush" id="company-list">
+          {% for company in companies %}
+          <a href="/{{ company.name }}"
+             class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 company-link"
+             data-name="{{ (company.info.company if company.info.company else company.name) | lower }}">
+            <span class="company-label text-truncate me-2">
+              {{ company.info.company if company.info.company else company.name }}
+            </span>
+            {% set top = namespace(score=None) %}
+            {% for job in company.jobs %}
+              {% if job._score and (top.score is none or job._score.score > top.score) %}
+                {% set top.score = job._score.score %}
+              {% endif %}
+            {% endfor %}
+            <div class="d-flex gap-1 flex-shrink-0">
+              {% if top.score is not none %}
+                {% set cls = "score-high" if top.score >= 9 else ("score-mid" if top.score >= 5 else "score-low") %}
+                <span class="badge {{ cls }} rounded-pill">🥇 {{ top.score }}/10</span>
+              {% endif %}
+              <span class="badge bg-secondary rounded-pill">{{ company.jobs | length }}</span>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Main content ── #}
+  <div class="col-lg-9 col-md-8">
+    <h2 class="mb-4">
+      Companies
+      <span class="text-muted fs-5 fw-normal ms-2">
+        {{ companies | length }} compan{{ 'ies' if companies | length != 1 else 'y' }}
+      </span>
+    </h2>
+
+    {% for company in companies %}
+    <div class="card mb-3 shadow-sm job-card position-relative">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <a href="/{{ company.name }}" class="text-decoration-none text-dark fw-bold fs-5 stretched-link">
+              {{ company.info.company if company.info.company else company.name }}
+            </a>
+            {% if company.info.description %}
+            <p class="text-muted small mb-0 mt-1">{{ company.info.description }}</p>
+            {% endif %}
+          </div>
+          <div class="d-flex gap-2 align-items-center ms-3 flex-shrink-0">
+            {% set top = namespace(score=None) %}
+            {% for job in company.jobs %}
+              {% if job._score and (top.score is none or job._score.score > top.score) %}
+                {% set top.score = job._score.score %}
+              {% endif %}
+            {% endfor %}
+            {% if top.score is not none %}
+              {% set cls = "score-high" if top.score >= 9 else ("score-mid" if top.score >= 5 else "score-low") %}
+              <span class="badge {{ cls }}">🥇 {{ top.score }}/10</span>
+            {% endif %}
+            <span class="badge bg-secondary">
+              {{ company.jobs | length }} role{{ 's' if company.jobs | length != 1 }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">No jobs found in the data folder yet.</div>
+    {% endfor %}
+  </div>
+
+</div>
+
+<script>
+  const filter = document.getElementById('company-filter');
+  filter.addEventListener('input', () => {
+    const q = filter.value.toLowerCase().trim();
+    document.querySelectorAll('.company-link').forEach(link => {
+      link.style.display = link.dataset.name.includes(q) ? '' : 'none';
+    });
+  });
+</script>
+{% endblock %}

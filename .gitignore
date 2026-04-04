@@ -1,0 +1,30 @@
+# Environment / secrets
+config.env
+.env
+*.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Data & outputs
+output.pdf
+output.json
+ref_html.html.save
+data/
+1data/
+2data/
+
+# Examples / scratch
+example.html
+example.sh
+
+# macOS
+.DS_Store

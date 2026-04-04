@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} — {{ job.company }}{% endblock %}
+
+{% block content %}
+{% from "base.html" import score_badge %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Companies</a></li>
+    <li class="breadcrumb-item"><a href="/{{ company }}">{{ job.company or company }}</a></li>
+    <li class="breadcrumb-item active">{{ job.title }}</li>
+  </ol>
+</nav>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body pb-3">
+
+    {# ── Header ── #}
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <h2 class="mb-1">{{ job.title or '—' }}</h2>
+        <div class="text-muted fs-6 mb-3">{{ job.company }}</div>
+        <div class="d-flex flex-wrap gap-2">
+          {% if job.location %}
+          <span class="badge badge-loc px-3 py-2">&#128205; {{ job.location }}</span>
+          {% endif %}
+          {% if job.employment_type %}
+          <span class="badge badge-type px-3 py-2">{{ job.employment_type }}</span>
+          {% endif %}
+          {% if job.experience_level and job.experience_level != 'unspecified' %}
+          <span class="badge badge-level px-3 py-2">{{ job.experience_level }}</span>
+          {% endif %}
+          {% if job.salary and job.salary != 'null' %}
+          <span class="badge bg-light text-dark border px-3 py-2">&#128176; {{ job.salary }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="d-flex gap-2 ms-3 flex-shrink-0 align-items-start">
+        <form action="/score/{{ company }}/{{ job._role_id }}" method="post" class="m-0">
+          <button class="btn btn-outline-primary" {{ "disabled" if not can_score }}
+                  title="{{ 'Upload a CV to enable scoring' if not can_score }}">
+            {{ "Re-score vs CV" if job._score else "Score vs CV" }}
+          </button>
+        </form>
+        {% if job._has_pdf %}
+        <a href="/{{ company }}/{{ job._role_id }}/pdf" target="_blank"
+           class="btn btn-outline-secondary">&#128196; PDF</a>
+        {% endif %}
+        {% if job.url %}
+        <a href="{{ job.url }}" target="_blank" class="btn btn-outline-secondary">&#127760; Source</a>
+        {% endif %}
+        <form action="/delete/{{ company }}/{{ job._role_id }}" method="post" class="m-0">
+          <button class="btn btn-outline-danger"
+                  onclick="return confirm('Remove this job?')">&#128465; Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+
+    {# ── Summary ── #}
+    {% if job.summary %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Summary</div>
+        <p class="mb-0">{{ job.summary }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Description ── #}
+    {% if job.description %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">About the Role</div>
+        <p class="mb-0">{{ job.description }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Responsibilities ── #}
+    {% if job.responsibilities %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Responsibilities</div>
+        <ul class="mb-0 ps-3">
+          {% for item in job.responsibilities %}
+          <li class="mb-1">{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+  <div class="col-lg-4">
+
+    {# ── CV Score ── #}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">CV Match</div>
+        {% if job._score %}
+          <div class="d-flex align-items-center gap-2 mb-2">
+            {{ score_badge(job._score, "fs-5 px-3 py-2") }}
+            <span class="text-muted small">out of 10</span>
+            {% if job._score.mode == 'brutal' %}
+            <span class="badge bg-danger" style="font-size:.65rem;">🔥 brutal</span>
+            {% endif %}
+            <a href="/help" class="text-decoration-none" title="How is this score calculated?"
+               style="display:inline-flex;align-items:center;justify-content:center;width:1.1rem;height:1.1rem;border-radius:50%;border:1.5px solid #adb5bd;color:#adb5bd;font-size:.65rem;font-weight:700;line-height:1;">?</a>
+          </div>
+          <p class="small mb-3">{{ job._score.reasoning }}</p>
+          {% if job._score.strengths %}
+          <div class="section-title">Strengths</div>
+          <ul class="mb-3 ps-3">
+            {% for s in job._score.strengths %}
+            <li class="small text-success mb-1">{{ s }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if job._score.gaps %}
+          <div class="section-title">Gaps</div>
+          <ul class="mb-0 ps-3">
+            {% for g in job._score.gaps %}
+            <li class="small text-danger mb-1">{{ g }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        {% else %}
+          <div class="d-flex align-items-center gap-2 mb-2">
+            {{ score_badge(None, "fs-5 px-3 py-2") }}
+            <span class="text-muted small">not scored yet</span>
+          </div>
+          <p class="small text-muted mb-0">
+            {% if not cv_uploaded %}
+              Upload your CV to score this role.
+            {% else %}
+              Click "Score vs CV" to analyse this role against your CV.
+            {% endif %}
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+    {# ── Requirements ── #}
+    {% if job.requirements %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Requirements</div>
+        <ul class="mb-0 ps-3">
+          {% for item in job.requirements %}
+          <li class="mb-1 small">{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Nice to have ── #}
+    {% if job.nice_to_have %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Nice to Have</div>
+        <ul class="mb-0 ps-3">
+          {% for item in job.nice_to_have %}
+          <li class="mb-1 small">{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
