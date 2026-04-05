@@ -67,6 +67,15 @@
         </div>
         <input type="hidden" name="mode" value="{{ scoring_mode }}">
       </form>
+      <form action="/set-notes" method="post" class="d-flex align-items-center gap-2 m-0">
+        <span class="text-white small">Use notes</span>
+        <div class="form-check form-switch m-0">
+          <input class="form-check-input" type="checkbox" id="notesToggle" name="_unused"
+                 {{ "checked" if use_notes }}
+                 onchange="this.form.querySelector('[name=use_notes]').value = this.checked ? '1' : '0'; this.form.submit()">
+        </div>
+        <input type="hidden" name="use_notes" value="{{ '1' if use_notes else '0' }}">
+      </form>
       <button type="button" class="btn btn-sm btn-outline-light"
               data-bs-toggle="modal" data-bs-target="#uploadJdModal">&#128196; Add JD</button>
       <button type="button" class="btn btn-sm {{ 'btn-warning' if candidate_notes else 'btn-outline-light' }}"

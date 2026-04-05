@@ -73,14 +73,21 @@ def _current_mode() -> str:
     return session.get("scoring_mode", "normal")
 
 
-def _score_path(company: str, role_id: str, mode: str) -> Path:
-    return DATA_DIR / company / "_scores" / f"{role_id}_{mode}.json"
+def _use_notes() -> bool:
+    return session.get("use_notes", False)
 
 
-def _load_score(company: str, role_id: str, mode: str | None = None) -> dict | None:
+def _score_path(company: str, role_id: str, mode: str, use_notes: bool = False) -> Path:
+    suffix = f"{mode}_notes" if use_notes else mode
+    return DATA_DIR / company / "_scores" / f"{role_id}_{suffix}.json"
+
+
+def _load_score(company: str, role_id: str, mode: str | None = None, use_notes: bool | None = None) -> dict | None:
     if mode is None:
         mode = _current_mode()
-    path = _score_path(company, role_id, mode)
+    if use_notes is None:
+        use_notes = _use_notes()
+    path = _score_path(company, role_id, mode, use_notes)
     if not path.exists():
         return None
     with open(path, encoding="utf-8") as f:
@@ -90,8 +97,8 @@ def _load_score(company: str, role_id: str, mode: str | None = None) -> dict | N
     return data
 
 
-def _save_score(company: str, role_id: str, score_data: dict, mode: str) -> None:
-    path = _score_path(company, role_id, mode)
+def _save_score(company: str, role_id: str, score_data: dict, mode: str, use_notes: bool = False) -> None:
+    path = _score_path(company, role_id, mode, use_notes)
     path.parent.mkdir(parents=True, exist_ok=True)
     score_data["mode"] = mode
     with open(path, "w", encoding="utf-8") as f:
@@ -166,11 +173,11 @@ _PROMPT_BRUTAL = (
 )
 
 
-def _do_score(job: dict, client, mode: str = "normal") -> dict:
+def _do_score(job: dict, client, mode: str = "normal", use_notes: bool = False) -> dict:
     title = job.get("title", "?")
-    log.debug("Scoring '%s' [mode=%s] …", title, mode)
+    log.debug("Scoring '%s' [mode=%s, notes=%s] …", title, mode, use_notes)
     cv_b64 = base64.standard_b64encode(CV_PATH.read_bytes()).decode()
-    notes = NOTES_PATH.read_text(encoding="utf-8").strip() if NOTES_PATH.exists() else ""
+    notes = NOTES_PATH.read_text(encoding="utf-8").strip() if (use_notes and NOTES_PATH.exists()) else ""
     notes_section = (
         f"Additional context provided by the candidate (treat as authoritative):\n{notes}\n\n"
         if notes else ""
@@ -312,6 +319,7 @@ def inject_globals():
         "cv_uploaded": CV_PATH.exists(),
         "can_score": CV_PATH.exists() and bool(_load_config().get("OPENAI_KEY")),
         "scoring_mode": _current_mode(),
+        "use_notes": _use_notes(),
         "existing_companies": _company_names(),
         "candidate_notes": NOTES_PATH.read_text(encoding="utf-8").strip() if NOTES_PATH.exists() else "",
     }
@@ -333,6 +341,12 @@ def notes_save():
 def set_mode():
     mode = request.form.get("mode", "normal")
     session["scoring_mode"] = mode if mode in ("normal", "brutal") else "normal"
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/set-notes", methods=["POST"])
+def set_notes_mode():
+    session["use_notes"] = request.form.get("use_notes") == "1"
     return redirect(request.referrer or url_for("index"))
 
 
@@ -496,10 +510,11 @@ def score_one(company: str, role_id: str):
     if not client:
         abort(400, "OPENAI_KEY not set in config.env.")
     mode = _current_mode()
+    notes = _use_notes()
     job = _get_job(company, role_id)
-    result = _do_score(job, client, mode)
+    result = _do_score(job, client, mode, notes)
     result["cv_hash"] = _cv_hash()
-    _save_score(company, role_id, result, mode)
+    _save_score(company, role_id, result, mode, notes)
     return redirect(request.referrer or url_for("job_view", company=company, role_id=role_id))
 
 
@@ -538,14 +553,15 @@ def score_company_stream(company: str):
     if not company_dir.is_dir():
         abort(404)
     mode = _current_mode()
+    notes = _use_notes()
 
     to_score = [
         f for f in sorted(company_dir.glob("*.json"))
-        if not f.name.startswith("_") and _load_score(company, f.stem, mode) is None
+        if not f.name.startswith("_") and _load_score(company, f.stem, mode, notes) is None
     ]
     total = len(to_score)
 
-    log.info("Starting batch score for '%s': %d job(s), mode=%s", company, total, mode)
+    log.info("Starting batch score for '%s': %d job(s), mode=%s, notes=%s", company, total, mode, notes)
 
     def generate():
         failed = 0
@@ -557,9 +573,9 @@ def score_company_stream(company: str):
             last_error = None
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
-                    result = _do_score(job, client, mode)
+                    result = _do_score(job, client, mode, notes)
                     result["cv_hash"] = _cv_hash()
-                    _save_score(company, json_file.stem, result, mode)
+                    _save_score(company, json_file.stem, result, mode, notes)
                     last_error = None
                     break
                 except Exception as e:
