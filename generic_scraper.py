@@ -69,7 +69,7 @@ class GenericScraper(BaseScraper):
         s = re.sub(r"[^\w\s-]", "", s)
         return re.sub(r"[\s-]+", "_", s).strip("_") or "company"
 
-    def fetch_jobs(self, base_url: str, html_src: str | None = None) -> list[dict]:
+    def fetch_jobs(self, base_url: str, html_src=None) -> list[dict]:
         if hasattr(self, "_jobs") and getattr(self, "_base_url_cache", None) == base_url:
             return self._jobs
 

@@ -125,7 +125,7 @@
             <div class="row g-2">
               <div class="col-sm-8">
                 <label class="form-label fw-semibold">Careers page URL</label>
-                <input type="url" id="scrapeUrl" class="form-control" placeholder="https://company.com/careers" oninput="updateUrlRequirement()">
+                <input type="url" id="scrapeUrl" class="form-control" placeholder="https://company.com/careers">
               </div>
               <div class="col-sm-4">
                 <label class="form-label fw-semibold">Company name <span class="fw-normal text-muted small">optional</span></label>
@@ -145,7 +145,7 @@
             <div id="fieldHtmlSource" class="d-none">
               <label class="form-label fw-semibold small">Paste HTML source</label>
               <textarea id="scrapeHtml" class="form-control form-control-sm font-monospace" rows="6"
-                        placeholder="Paste raw HTML here to skip web fetching…"
+                        placeholder="Paste raw HTML here to skip web fetching — URL above becomes irrelevant"
                         oninput="updateUrlRequirement()"></textarea>
             </div>
           </div>
@@ -227,13 +227,6 @@ function updateBoardFields() {
   document.getElementById('fieldLeverSlug').classList.toggle('d-none', board !== 'lever');
   document.getElementById('fieldGeneric').classList.toggle('d-none', board !== 'generic');
   document.getElementById('fieldHtmlSource').classList.toggle('d-none', board !== 'generic');
-  updateUrlRequirement();
-}
-
-function updateUrlRequirement() {
-  const hasHtml = (document.getElementById('scrapeHtml')?.value.trim().length ?? 0) > 0;
-  const urlEl   = document.getElementById('scrapeUrl');
-  urlEl.placeholder = hasHtml ? 'optional when HTML is pasted' : 'https://company.com/careers';
 }
 
 async function fetchCategories() {
