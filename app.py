@@ -285,6 +285,7 @@ def _url_to_pdf_and_text(url: str) -> tuple[bytes, str]:
 
 _JD_SCHEMA = {
     "title": "job title",
+    "company": "company name as it appears in the posting — leave empty string if not clearly stated",
     "location": "location or 'Remote'",
     "employment_type": "full-time | part-time | contract | internship | other",
     "experience_level": "junior | mid | senior | lead | executive | unspecified",
@@ -547,7 +548,7 @@ def _save_job(company_raw: str, job_data: dict, pdf_bytes: bytes | None = None) 
     log.info("Saving job: %r  company: %r", title, company_raw)
 
     company = re.sub(r"[^\w\s-]", "", company_raw.lower())
-    company = re.sub(r"[\s-]+", "_", company).strip("_") or "company"
+    company = re.sub(r"[\s-]+", "_", company).strip("_") or "unknown"
     company_dir = DATA_DIR / company
     company_dir.mkdir(parents=True, exist_ok=True)
 
@@ -586,8 +587,6 @@ def add_job_url():
     pdf_file    = request.files.get("jd_pdf")
     url         = request.form.get("jd_url", "").strip()
 
-    if not company_raw:
-        abort(400, "Company name is required.")
     if not pdf_file and not url:
         abort(400, "Provide either a PDF file or a URL.")
 
@@ -612,9 +611,13 @@ def add_job_url():
         pdf_bytes, jd_text = _url_to_pdf_and_text(url)
 
     job_data = _analyse_jd(jd_text, client, url=url)
-    job_data["company"] = company_raw
+    # User-supplied name takes precedence; fall back to LLM-extracted name
+    resolved = company_raw or job_data.get("company", "").strip()
+    if not resolved:
+        abort(400, "Could not determine the company name. Please fill in the Company field.")
+    job_data["company"] = resolved
     job_data["source"]  = "url" if url else "manual"
-    company, role_id = _save_job(company_raw, job_data, pdf_bytes)
+    company, role_id = _save_job(resolved, job_data, pdf_bytes)
     return redirect(url_for("job_view", company=company, role_id=role_id))
 
 
@@ -623,8 +626,6 @@ def add_job_text():
     company_raw = request.form.get("company", "").strip()
     text        = request.form.get("text", "").strip()
 
-    if not company_raw:
-        abort(400, "Company name is required.")
     if not text:
         abort(400, "Job description text is required.")
 
@@ -633,9 +634,12 @@ def add_job_text():
         abort(400, "OPENAI_KEY not set in config.env.")
 
     job_data = _analyse_jd(text, client)
-    job_data["company"] = company_raw
+    resolved = company_raw or job_data.get("company", "").strip()
+    if not resolved:
+        abort(400, "Could not determine the company name. Please fill in the Company field.")
+    job_data["company"] = resolved
     job_data["source"]  = "text"
-    company, role_id = _save_job(company_raw, job_data)
+    company, role_id = _save_job(resolved, job_data)
     return redirect(url_for("job_view", company=company, role_id=role_id))
 
 
@@ -657,16 +661,15 @@ def scrape_categories():
             return json.dumps({"error": str(e)}), 500
     else:
         from generic_scraper import GenericScraper
-        if not url:
-            return json.dumps({"error": "Careers page URL is required."}), 400
-        if not company:
-            return json.dumps({"error": "Company name is required."}), 400
+        html_src = data.get("html_src", "").strip()
+        if not url and not html_src:
+            return json.dumps({"error": "Enter the careers page URL or paste HTML source."}), 400
         client = _openai_client()
         if not client:
             return json.dumps({"error": "OPENAI_KEY is required for generic scraping."}), 400
-        base_url = url
+        base_url = url or "unknown"
         try:
-            jobs = GenericScraper().setup(DATA_DIR, client).fetch_jobs(base_url)
+            jobs = GenericScraper().setup(DATA_DIR, client).fetch_jobs(base_url, html_src=html_src or None)
         except Exception as e:
             return json.dumps({"error": str(e)}), 500
 
@@ -698,14 +701,20 @@ def scrape_stream():
     if not params:
         abort(400, "No scrape session.")
 
-    board   = params.get("board", "lever")
-    company = params.get("company", "")
-    jobs    = params.get("jobs", [])
-    client  = _openai_client()
+    board        = params.get("board", "lever")
+    company_raw  = params.get("company", "").strip()
+    jobs         = params.get("jobs", [])
+    client       = _openai_client()
 
-    # Slugify company name for directory
-    company_slug = re.sub(r"[^\w\s-]", "", company.lower())
-    company_slug = re.sub(r"[\s-]+", "_", company_slug).strip("_") or "company"
+    def _slugify(name: str) -> str:
+        import unicodedata
+        s = unicodedata.normalize("NFKD", name.lower())
+        s = s.encode("ascii", "ignore").decode("ascii")
+        s = re.sub(r"[^\w\s-]", "", s)
+        return re.sub(r"[\s-]+", "_", s).strip("_") or "company"
+
+    # Fixed company slug when user provided a name; None means per-job auto-detect
+    fixed_company = _slugify(company_raw) if company_raw else None
 
     def generate():
         total = len(jobs)
@@ -718,10 +727,18 @@ def scrape_stream():
         else:
             from generic_scraper import GenericScraper
             scraper = GenericScraper().setup(DATA_DIR, client)
-        for event in scraper.scrape_iter(jobs, company_slug):
+        last_company = fixed_company
+        for event in scraper.scrape_iter(jobs, fixed_company):
             event["total"] = total
+            if event.get("company"):
+                last_company = event["company"]
             yield f"data: {json.dumps(event)}\n\n"
-        yield f"data: {json.dumps({'done': True, 'total': total, 'company': company_slug})}\n\n"
+        done_payload: dict = {"done": True, "total": total}
+        if fixed_company:
+            done_payload["company"] = fixed_company
+        elif last_company:
+            done_payload["company"] = last_company
+        yield f"data: {json.dumps(done_payload)}\n\n"
 
     return Response(
         stream_with_context(generate()),

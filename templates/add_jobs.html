@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Add Jobs{% endblock %}
+{% block title %}JobFit — Add Jobs{% endblock %}
 
 {% block content %}
 <div class="row">
@@ -26,7 +26,10 @@
   <div class="card-header p-0" style="padding-bottom:8px!important">
     <ul class="nav nav-tabs card-header-tabs px-3" id="addJobsTabs">
       <li class="nav-item">
-        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-url">URL or file</button>
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-url">URL</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-file">File</button>
       </li>
       <li class="nav-item">
         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-text">Paste text</button>
@@ -39,24 +42,17 @@
 
   <div class="tab-content">
 
-    {# ── Tab 1: URL or file ── #}
+    {# ── Tab 1: URL ── #}
     <div class="tab-pane fade show active p-4" id="tab-url">
       <form action="/add-jobs/url" method="post" enctype="multipart/form-data" id="urlForm">
         <div class="mb-3">
-          <label class="form-label fw-semibold">Company <span class="text-danger">*</span></label>
+          <label class="form-label fw-semibold">Company</label>
           <input type="text" name="company" class="form-control" list="company-datalist"
-                 placeholder="Company name…" autocomplete="off" required>
-        </div>
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Job posting URL</label>
-          <input type="url" name="jd_url" class="form-control" placeholder="https://…">
-        </div>
-        <div class="d-flex align-items-center gap-2 my-3 text-muted small">
-          <hr class="flex-grow-1 m-0"><span>or</span><hr class="flex-grow-1 m-0">
+                 placeholder="auto-detect" autocomplete="off">
         </div>
         <div class="mb-4">
-          <label class="form-label fw-semibold">Upload file <span class="fw-normal text-muted small">(PDF or TXT)</span></label>
-          <input type="file" name="jd_pdf" class="form-control" accept=".pdf,.txt">
+          <label class="form-label fw-semibold">Job posting URL</label>
+          <input type="url" name="jd_url" class="form-control" placeholder="https://…">
         </div>
         <button type="submit" class="btn btn-primary" id="urlSubmit" {{ "disabled" if not can_score }}>
           Add job
@@ -65,13 +61,32 @@
       </form>
     </div>
 
-    {# ── Tab 2: Paste text ── #}
+    {# ── Tab 2: File ── #}
+    <div class="tab-pane fade p-4" id="tab-file">
+      <form action="/add-jobs/url" method="post" enctype="multipart/form-data" id="fileForm">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Company</label>
+          <input type="text" name="company" class="form-control" list="company-datalist"
+                 placeholder="auto-detect" autocomplete="off">
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Upload file <span class="fw-normal text-muted small">(PDF or TXT)</span></label>
+          <input type="file" name="jd_pdf" class="form-control" accept=".pdf,.txt">
+        </div>
+        <button type="submit" class="btn btn-primary" id="fileSubmit" {{ "disabled" if not can_score }}>
+          Add job
+        </button>
+        {% if not can_score %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+      </form>
+    </div>
+
+    {# ── Tab 3: Paste text ── #}
     <div class="tab-pane fade p-4" id="tab-text">
       <form action="/add-jobs/text" method="post" id="textForm">
         <div class="mb-3">
-          <label class="form-label fw-semibold">Company <span class="text-danger">*</span></label>
+          <label class="form-label fw-semibold">Company</label>
           <input type="text" name="company" class="form-control" list="company-datalist"
-                 placeholder="Company name…" autocomplete="off" required>
+                 placeholder="auto-detect" autocomplete="off">
         </div>
         <div class="mb-4">
           <label class="form-label fw-semibold">Job description</label>
@@ -94,8 +109,8 @@
           <div class="col-sm-3">
             <label class="form-label fw-semibold">Board</label>
             <select id="scrapeBoard" class="form-select" onchange="updateBoardFields()">
-              <option value="lever">Lever</option>
               <option value="generic" selected>Generic</option>
+              <option value="lever">Lever</option>
             </select>
           </div>
 
@@ -110,21 +125,29 @@
             <div class="row g-2">
               <div class="col-sm-8">
                 <label class="form-label fw-semibold">Careers page URL</label>
-                <input type="url" id="scrapeUrl" class="form-control" placeholder="https://company.com/careers">
+                <input type="url" id="scrapeUrl" class="form-control" placeholder="https://company.com/careers" oninput="updateUrlRequirement()">
               </div>
               <div class="col-sm-4">
-                <label class="form-label fw-semibold">Company name</label>
-                <input type="text" id="scrapeCompanyName" class="form-control" placeholder="Acme Corp">
+                <label class="form-label fw-semibold">Company name <span class="fw-normal text-muted small">optional</span></label>
+                <input type="text" id="scrapeCompanyName" class="form-control" placeholder="auto-detect">
               </div>
             </div>
           </div>
         </div>
 
-        <details class="mb-3">
-          <summary class="text-muted small" style="cursor:pointer">Options</summary>
-          <div class="mt-2" style="max-width:12rem">
-            <label class="form-label fw-semibold small">Limit <span class="fw-normal text-muted">optional</span></label>
-            <input type="number" id="scrapeLimit" class="form-control form-control-sm" placeholder="all" min="1">
+        <details class="mb-3" id="advancedDetails">
+          <summary class="text-muted small" style="cursor:pointer">Advanced</summary>
+          <div class="mt-2 d-flex flex-column gap-3">
+            <div style="max-width:12rem">
+              <label class="form-label fw-semibold small">Limit</label>
+              <input type="number" id="scrapeLimit" class="form-control form-control-sm" placeholder="all" min="1">
+            </div>
+            <div id="fieldHtmlSource" class="d-none">
+              <label class="form-label fw-semibold small">Paste HTML source</label>
+              <textarea id="scrapeHtml" class="form-control form-control-sm font-monospace" rows="6"
+                        placeholder="Paste raw HTML here to skip web fetching…"
+                        oninput="updateUrlRequirement()"></textarea>
+            </div>
           </div>
         </details>
 
@@ -147,7 +170,7 @@
           <button class="btn btn-sm btn-outline-secondary" onclick="selectAll(true)">All</button>
           <button class="btn btn-sm btn-outline-secondary" onclick="selectAll(false)">None</button>
         </div>
-        <button class="btn btn-primary" onclick="startScrape()">Start scraping</button>
+        <button class="btn btn-primary" onclick="startScrape()">Go</button>
         <button class="btn btn-outline-secondary ms-2" onclick="resetScraper()">Back</button>
       </div>
 
@@ -183,7 +206,9 @@
 </datalist>
 
 <script>
-['urlForm', 'textForm'].forEach(id => {
+updateBoardFields();  // initialise field visibility on page load
+
+['urlForm', 'fileForm', 'textForm'].forEach(id => {
   const form = document.getElementById(id);
   if (!form) return;
   form.addEventListener('submit', () => {
@@ -201,6 +226,14 @@ function updateBoardFields() {
   const board = document.getElementById('scrapeBoard').value;
   document.getElementById('fieldLeverSlug').classList.toggle('d-none', board !== 'lever');
   document.getElementById('fieldGeneric').classList.toggle('d-none', board !== 'generic');
+  document.getElementById('fieldHtmlSource').classList.toggle('d-none', board !== 'generic');
+  updateUrlRequirement();
+}
+
+function updateUrlRequirement() {
+  const hasHtml = (document.getElementById('scrapeHtml')?.value.trim().length ?? 0) > 0;
+  const urlEl   = document.getElementById('scrapeUrl');
+  urlEl.placeholder = hasHtml ? 'optional when HTML is pasted' : 'https://company.com/careers';
 }
 
 async function fetchCategories() {
@@ -215,13 +248,18 @@ async function fetchCategories() {
     if (!company) { errEl.textContent = 'Enter a company slug.'; errEl.classList.remove('d-none'); return; }
     payload.company = company;
   } else {
-    const url     = document.getElementById('scrapeUrl').value.trim();
-    const company = document.getElementById('scrapeCompanyName').value.trim();
-    if (!url)     { errEl.textContent = 'Enter the careers page URL.'; errEl.classList.remove('d-none'); return; }
-    if (!company) { errEl.textContent = 'Enter the company name.';     errEl.classList.remove('d-none'); return; }
-    payload.url     = url;
-    payload.company = company;
+    const url      = document.getElementById('scrapeUrl').value.trim();
+    const company  = document.getElementById('scrapeCompanyName').value.trim();
+    const htmlSrc  = document.getElementById('scrapeHtml')?.value.trim() || '';
+    if (!url && !htmlSrc) { errEl.textContent = 'Enter the careers page URL or paste HTML source.'; errEl.classList.remove('d-none'); return; }
+    payload.url      = url;
+    payload.company  = company;
+    payload.html_src = htmlSrc;
   }
+
+  // Reset any previous results
+  document.getElementById('scrapeStep2').classList.add('d-none');
+  document.getElementById('jobList').innerHTML = '';
 
   const btn = document.getElementById('fetchBtn');
   btn.disabled = true;
@@ -263,28 +301,33 @@ function renderJobs(jobs) {
     return;
   }
 
-  // Group by category
+  // Decide grouping dimension: multiple companies → group by company; else by category
+  const uniqueCompanies = new Set(jobs.map(j => j.company || '').filter(Boolean));
+  const byCompany = uniqueCompanies.size > 1;
+  const groupKey  = byCompany ? j => j.company || 'Unknown' : j => j.category || 'General';
+
   const groups = {};
   const order  = [];
   for (const job of jobs) {
-    const cat = job.category || 'General';
-    if (!groups[cat]) { groups[cat] = []; order.push(cat); }
-    groups[cat].push(job);
+    const key = groupKey(job);
+    if (!groups[key]) { groups[key] = []; order.push(key); }
+    groups[key].push(job);
   }
 
-  const catCount = order.length;
+  const groupLabel = byCompany ? 'compan' : 'categor';
   document.getElementById('scrapeJobCount').textContent =
-    `${jobs.length} job${jobs.length !== 1 ? 's' : ''} · ${catCount} categor${catCount !== 1 ? 'ies' : 'y'}`;
+    `${jobs.length} job${jobs.length !== 1 ? 's' : ''} · ${order.length} ${groupLabel}${order.length !== 1 ? 'ies' : 'y'}`;
 
-  el.innerHTML = order.map((cat, ci) => {
+  el.innerHTML = order.map((key, ci) => {
     const catId = `cat-${ci}`;
-    const rows = groups[cat].map((job, ji) => {
-      const jobId = `job-${ci}-${ji}`;
-      const safeTitle = job.title.replace(/"/g, '&quot;');
-      const safeUrl   = job.url.replace(/"/g, '&quot;');
+    const rows = groups[key].map((job, ji) => {
+      const jobId     = `job-${ci}-${ji}`;
+      const safeTitle   = job.title.replace(/"/g, '&quot;');
+      const safeUrl     = job.url.replace(/"/g, '&quot;');
+      const safeCompany = (job.company || '').replace(/"/g, '&quot;');
       return `<div class="d-flex align-items-center ps-4 py-1 border-bottom border-light">
         <input class="form-check-input job-check flex-shrink-0 me-2" type="checkbox"
-               data-cat="${ci}" value="${safeUrl}" data-title="${safeTitle}"
+               data-cat="${ci}" value="${safeUrl}" data-title="${safeTitle}" data-company="${safeCompany}"
                id="${jobId}" checked onchange="updateCatToggle(${ci})">
         <label class="form-check-label small text-truncate" for="${jobId}" style="max-width:100%"
                title="${safeTitle}">${job.title}</label>
@@ -294,8 +337,8 @@ function renderJobs(jobs) {
       <div class="d-flex align-items-center px-3 py-2 bg-light">
         <input class="form-check-input flex-shrink-0 me-2 cat-toggle" type="checkbox"
                id="${catId}" data-ci="${ci}" checked onchange="toggleCategory(this)">
-        <label class="form-check-label fw-semibold small mb-0 me-2" for="${catId}">${cat}</label>
-        <span class="badge bg-secondary ms-auto" style="font-weight:400">${groups[cat].length}</span>
+        <label class="form-check-label fw-semibold small mb-0 me-2" for="${catId}">${key}</label>
+        <span class="badge bg-secondary ms-auto" style="font-weight:400">${groups[key].length}</span>
       </div>
       ${rows}
     </div>`;
@@ -333,7 +376,7 @@ async function startScrape() {
     : document.getElementById('scrapeCompanyName').value.trim();
   const limit   = parseInt(document.getElementById('scrapeLimit').value) || null;
   const jobs    = [...document.querySelectorAll('.job-check:checked')].map(cb => ({
-    url: cb.value, title: cb.dataset.title,
+    url: cb.value, title: cb.dataset.title, company: cb.dataset.company || '',
   }));
 
   await fetch('/add-jobs/scrape/confirm', {

@@ -191,10 +191,22 @@ class BaseScraper(ABC):
         self._openai_client = openai_client
         return self
 
-    def scrape_iter(self, jobs: list[dict], company: str):
+    def scrape_iter(self, jobs: list[dict], company: Optional[str]):
         """Scrape a list of jobs [{url, title?, ...}] and yield progress dicts.
+
+        company: fixed directory name for all jobs, or None to derive it from
+                 each job's extracted company name (per-job auto-detect mode).
         Call setup() first."""
+        import re
         import tempfile
+        import unicodedata
+
+        def _slugify(name: str) -> str:
+            s = unicodedata.normalize("NFKD", name.lower())
+            s = s.encode("ascii", "ignore").decode("ascii")
+            s = re.sub(r"[^\w\s-]", "", s)
+            return re.sub(r"[\s-]+", "_", s).strip("_") or "company"
+
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             context = browser.new_context()
@@ -213,7 +225,17 @@ class BaseScraper(ABC):
                             event["title"] = job.get("title") or event["title"]
                         except Exception as e:
                             event["analyse_error"] = str(e)
-                    self._save(url, pdf_tmp, company, job)
+                    # Resolve company directory: fixed > JD analysis > pre-fetched stub > URL hostname
+                    if company:
+                        dest_company = company
+                    elif job and job.get("company"):
+                        dest_company = _slugify(job["company"])
+                    elif job_stub.get("company"):
+                        dest_company = _slugify(job_stub["company"])
+                    else:
+                        dest_company = "unknown"
+                    event["company"] = dest_company
+                    self._save(url, pdf_tmp, dest_company, job)
                     pdf_tmp.unlink(missing_ok=True)
                 except Exception as e:
                     event["error"] = str(e)

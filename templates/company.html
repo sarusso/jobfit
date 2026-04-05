@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ jobs[0].company if jobs and jobs[0].company else company }}{% endblock %}
+{% block title %}JobFit — {{ jobs[0].company if jobs and jobs[0].company else company }}{% endblock %}
 
 {% block content %}
 {% from "base.html" import score_badge %}

@@ -10,8 +10,11 @@ Usage (CLI):
 """
 
 import json
+import logging
 import re
 from urllib.parse import urljoin
+
+log = logging.getLogger(__name__)
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
@@ -60,14 +63,17 @@ class GenericScraper(BaseScraper):
         return args.url
 
     def get_company_name(self, args):
-        slug = re.sub(r"[^\w\s-]", "", args.company.lower())
-        return re.sub(r"[\s-]+", "_", slug).strip("_") or "company"
+        import unicodedata
+        s = unicodedata.normalize("NFKD", args.company.lower())
+        s = s.encode("ascii", "ignore").decode("ascii")
+        s = re.sub(r"[^\w\s-]", "", s)
+        return re.sub(r"[\s-]+", "_", s).strip("_") or "company"
 
-    def fetch_jobs(self, base_url: str) -> list[dict]:
+    def fetch_jobs(self, base_url: str, html_src: str | None = None) -> list[dict]:
         if hasattr(self, "_jobs") and getattr(self, "_base_url_cache", None) == base_url:
             return self._jobs
 
-        html = _rendered_html(base_url)
+        html = html_src if html_src else _rendered_html(base_url)
 
         prompt = (
             "You are analyzing the rendered HTML of a company careers/jobs page.\n\n"
@@ -77,15 +83,17 @@ class GenericScraper(BaseScraper):
             "Extract every individual job posting linked on this page.\n"
             "Return ONLY valid JSON:\n"
             "{\n"
-            '  "categories": ["list of unique department or category names"],\n'
+            '  "company": "Company name",\n'
+            '  "categories": ["list of unique department or job category names"],\n'
             '  "jobs": [\n'
-            '    {"title": "Job Title", "url": "<href value>", "category": "Department"}\n'
+            '    {"title": "Job Title", "url": "<href value>", "category": "Department", "company": "Company name"}\n'
             '  ]\n'
             "}\n\n"
             "Rules:\n"
             "- Only include <a href> links that point to individual job postings\n"
             "- Use the href value exactly as it appears in the HTML\n"
             "- If no departments are labelled, use 'General' for every job\n"
+            "- The company field in each job should match the top-level company unless the page lists jobs for multiple companies\n"
             "- Return empty lists if no jobs are found"
         )
 
@@ -94,12 +102,18 @@ class GenericScraper(BaseScraper):
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
-            timeout=60,
+            timeout=120,
         )
         data = json.loads(response.choices[0].message.content)
+        log.debug("fetch_jobs raw response:\n%s", json.dumps(data, indent=2, ensure_ascii=False))
+        top_company = data.get("company", "")
 
         self._jobs = [
-            {**job, "url": urljoin(base_url, job["url"])}
+            {
+                **job,
+                "url": urljoin(base_url, job["url"]),
+                "company": job.get("company") or top_company,
+            }
             for job in data.get("jobs", [])
             if job.get("url")
         ]
