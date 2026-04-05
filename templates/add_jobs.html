@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+{% block title %}Add Jobs{% endblock %}
+
+{% block content %}
+<div class="row">
+<div class="col-lg-8 offset-lg-2">
+
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">Companies</a></li>
+    <li class="breadcrumb-item active">Add Jobs</li>
+  </ol>
+</nav>
+
+<h2 class="mb-3">Add Jobs</h2>
+
+{% if not can_score %}
+<div class="alert alert-warning small mb-3">
+  <strong>No OpenAI key configured.</strong>
+  URL and text analysis require <code>OPENAI_KEY</code> in <code>config.env</code>.
+  Scraping will still save PDFs, but no structured JSON will be extracted.
+</div>
+{% endif %}
+
+<div class="card shadow-sm">
+  <div class="card-header p-0" style="padding-bottom:8px!important">
+    <ul class="nav nav-tabs card-header-tabs px-3" id="addJobsTabs">
+      <li class="nav-item">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-url">URL or file</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-text">Paste text</button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-scrape">Scrape</button>
+      </li>
+    </ul>
+  </div>
+
+  <div class="tab-content">
+
+    {# ── Tab 1: URL or file ── #}
+    <div class="tab-pane fade show active p-4" id="tab-url">
+      <form action="/add-jobs/url" method="post" enctype="multipart/form-data" id="urlForm">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Company <span class="text-danger">*</span></label>
+          <input type="text" name="company" class="form-control" list="company-datalist"
+                 placeholder="Company name…" autocomplete="off" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Job posting URL</label>
+          <input type="url" name="jd_url" class="form-control" placeholder="https://…">
+        </div>
+        <div class="d-flex align-items-center gap-2 my-3 text-muted small">
+          <hr class="flex-grow-1 m-0"><span>or</span><hr class="flex-grow-1 m-0">
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Upload file <span class="fw-normal text-muted small">(PDF or TXT)</span></label>
+          <input type="file" name="jd_pdf" class="form-control" accept=".pdf,.txt">
+        </div>
+        <button type="submit" class="btn btn-primary" id="urlSubmit" {{ "disabled" if not can_score }}>
+          Add job
+        </button>
+        {% if not can_score %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+      </form>
+    </div>
+
+    {# ── Tab 2: Paste text ── #}
+    <div class="tab-pane fade p-4" id="tab-text">
+      <form action="/add-jobs/text" method="post" id="textForm">
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Company <span class="text-danger">*</span></label>
+          <input type="text" name="company" class="form-control" list="company-datalist"
+                 placeholder="Company name…" autocomplete="off" required>
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Job description</label>
+          <textarea name="text" class="form-control font-monospace" rows="10"
+                    placeholder="Paste the full job description here…" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" id="textSubmit" {{ "disabled" if not can_score }}>
+          Add job
+        </button>
+        {% if not can_score %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+      </form>
+    </div>
+
+    {# ── Tab 3: Scrape ── #}
+    <div class="tab-pane fade p-4" id="tab-scrape">
+
+      {# Step 1 #}
+      <div id="scrapeStep1">
+        <div class="row g-3 mb-3 align-items-end">
+          <div class="col-sm-3">
+            <label class="form-label fw-semibold">Board</label>
+            <select id="scrapeBoard" class="form-select" onchange="updateBoardFields()">
+              <option value="lever">Lever</option>
+              <option value="generic">Generic</option>
+            </select>
+          </div>
+
+          {# Lever fields #}
+          <div class="col-sm-9" id="fieldLeverSlug">
+            <label class="form-label fw-semibold">Company slug</label>
+            <input type="text" id="scrapeCompany" class="form-control" placeholder="e.g. mistral">
+          </div>
+
+          {# Generic fields #}
+          <div class="col-sm-9 d-none" id="fieldGeneric">
+            <div class="row g-2">
+              <div class="col-sm-8">
+                <label class="form-label fw-semibold">Careers page URL</label>
+                <input type="url" id="scrapeUrl" class="form-control" placeholder="https://company.com/careers">
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label fw-semibold">Company name</label>
+                <input type="text" id="scrapeCompanyName" class="form-control" placeholder="Acme Corp">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <details class="mb-3">
+          <summary class="text-muted small" style="cursor:pointer">Options</summary>
+          <div class="mt-2" style="max-width:12rem">
+            <label class="form-label fw-semibold small">Limit <span class="fw-normal text-muted">optional</span></label>
+            <input type="number" id="scrapeLimit" class="form-control form-control-sm" placeholder="all" min="1">
+          </div>
+        </details>
+
+        <button class="btn btn-outline-primary" onclick="fetchCategories()">
+          <span id="fetchSpinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
+          Fetch categories
+        </button>
+        <p id="fetchError" class="text-danger small mt-2 mb-0 d-none"></p>
+      </div>
+
+      {# Step 2: categories #}
+      <div id="scrapeStep2" class="d-none">
+        <hr class="my-4">
+        <p class="fw-semibold mb-1">Select categories to scrape:</p>
+        <p class="text-muted small mb-3" id="scrapeJobCount"></p>
+        <div id="categoryList" class="mb-3 d-flex flex-wrap gap-2"></div>
+        <div class="d-flex gap-2 mb-4">
+          <button class="btn btn-sm btn-outline-secondary" onclick="selectAll(true)">All</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="selectAll(false)">None</button>
+        </div>
+        <button class="btn btn-primary" onclick="startScrape()">Start scraping</button>
+        <button class="btn btn-outline-secondary ms-2" onclick="resetScraper()">Back</button>
+      </div>
+
+      {# Step 3: progress #}
+      <div id="scrapeStep3" class="d-none">
+        <hr class="my-4">
+        <div class="d-flex justify-content-between align-items-baseline mb-1">
+          <span class="fw-semibold" id="scrapeProgressLabel">Scraping…</span>
+          <span class="text-muted small" id="scrapeCounts"></span>
+        </div>
+        <div class="progress mb-2" style="height:.4rem;border-radius:1rem">
+          <div id="scrapeBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+               style="width:0%;border-radius:1rem"></div>
+        </div>
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <p class="text-muted small mb-0" id="scrapeCurrentTitle"></p>
+          <button class="btn btn-sm btn-outline-danger ms-auto d-none" id="cancelScrape" onclick="cancelScrape()">Cancel</button>
+        </div>
+        <div id="scrapeLog" class="font-monospace small border rounded p-2 bg-light"
+             style="max-height:180px;overflow-y:auto"></div>
+      </div>
+
+    </div>{# end tab-scrape #}
+  </div>{# end tab-content #}
+</div>{# end card #}
+
+</div>
+</div>
+
+<datalist id="company-datalist">
+  {% for c in existing_companies %}<option value="{{ c }}">{% endfor %}
+</datalist>
+
+<script>
+['urlForm', 'textForm'].forEach(id => {
+  const form = document.getElementById(id);
+  if (!form) return;
+  form.addEventListener('submit', () => {
+    const btn = form.querySelector('button[type=submit]');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing…';
+  });
+});
+
+let _baseUrl = '';
+let _es = null;
+
+function updateBoardFields() {
+  const board = document.getElementById('scrapeBoard').value;
+  document.getElementById('fieldLeverSlug').classList.toggle('d-none', board !== 'lever');
+  document.getElementById('fieldGeneric').classList.toggle('d-none', board !== 'generic');
+}
+
+async function fetchCategories() {
+  const board   = document.getElementById('scrapeBoard').value;
+  const spinner = document.getElementById('fetchSpinner');
+  const errEl   = document.getElementById('fetchError');
+  errEl.classList.add('d-none');
+
+  let payload = {board};
+  if (board === 'lever') {
+    const company = document.getElementById('scrapeCompany').value.trim();
+    if (!company) { errEl.textContent = 'Enter a company slug.'; errEl.classList.remove('d-none'); return; }
+    payload.company = company;
+  } else {
+    const url     = document.getElementById('scrapeUrl').value.trim();
+    const company = document.getElementById('scrapeCompanyName').value.trim();
+    if (!url)     { errEl.textContent = 'Enter the careers page URL.'; errEl.classList.remove('d-none'); return; }
+    if (!company) { errEl.textContent = 'Enter the company name.';     errEl.classList.remove('d-none'); return; }
+    payload.url     = url;
+    payload.company = company;
+  }
+
+  spinner.classList.remove('d-none');
+  try {
+    const resp = await fetch('/add-jobs/scrape/categories', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    spinner.classList.add('d-none');
+    if (data.error) {
+      errEl.textContent = data.error;
+      errEl.classList.remove('d-none');
+      return;
+    }
+    _baseUrl = data.base_url;
+    renderCategories(data.categories);
+    document.getElementById('scrapeStep2').classList.remove('d-none');
+  } catch (e) {
+    spinner.classList.add('d-none');
+    errEl.textContent = 'Request failed: ' + e.message;
+    errEl.classList.remove('d-none');
+  }
+}
+
+function renderCategories(cats) {
+  const el = document.getElementById('categoryList');
+  if (!cats.length) {
+    el.innerHTML = '<span class="text-muted small">No categories found — all jobs will be scraped.</span>';
+    document.getElementById('scrapeJobCount').textContent = '';
+    return;
+  }
+  el.innerHTML = cats.map(c => `
+    <div class="form-check form-check-inline border rounded px-3 py-1 m-0 bg-white">
+      <input class="form-check-input category-check" type="checkbox" value="${c}" id="cat-${c}" checked>
+      <label class="form-check-label small" for="cat-${c}">${c}</label>
+    </div>`).join('');
+  document.getElementById('scrapeJobCount').textContent =
+    `${cats.length} categor${cats.length === 1 ? 'y' : 'ies'} found.`;
+}
+
+function selectAll(checked) {
+  document.querySelectorAll('.category-check').forEach(cb => cb.checked = checked);
+}
+
+function resetScraper() {
+  document.getElementById('scrapeStep2').classList.add('d-none');
+  document.getElementById('scrapeStep3').classList.add('d-none');
+}
+
+async function startScrape() {
+  const board      = document.getElementById('scrapeBoard').value;
+  const company    = board === 'lever'
+    ? document.getElementById('scrapeCompany').value.trim()
+    : document.getElementById('scrapeCompanyName').value.trim();
+  const limit      = parseInt(document.getElementById('scrapeLimit').value) || null;
+  const categories = [...document.querySelectorAll('.category-check:checked')].map(cb => cb.value);
+
+  await fetch('/add-jobs/scrape/confirm', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({board, company, base_url: _baseUrl, categories, limit}),
+  });
+
+  document.getElementById('scrapeStep2').classList.add('d-none');
+  document.getElementById('scrapeStep3').classList.remove('d-none');
+  document.getElementById('scrapeLog').innerHTML = '';
+  document.getElementById('scrapeBar').style.width = '0%';
+  document.getElementById('scrapeProgressLabel').textContent = 'Fetching job links…';
+  document.getElementById('scrapeCounts').textContent = '';
+  document.getElementById('scrapeCurrentTitle').textContent = '';
+
+  _es = new EventSource('/add-jobs/scrape/stream');
+  document.getElementById('cancelScrape').classList.remove('d-none');
+
+  function finishScrape() {
+    _es.close();
+    document.getElementById('cancelScrape').classList.add('d-none');
+    document.getElementById('scrapeBar').classList.remove('progress-bar-animated', 'progress-bar-striped');
+  }
+
+  _es.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.done) {
+      finishScrape();
+      document.getElementById('scrapeBar').style.width = '100%';
+      document.getElementById('scrapeCounts').textContent = '';
+      document.getElementById('scrapeCurrentTitle').textContent = '';
+      document.getElementById('scrapeProgressLabel').innerHTML =
+        `Done — ${d.total} job${d.total !== 1 ? 's' : ''} scraped.` +
+        (d.company ? ` <a href="/${d.company}" class="btn btn-sm btn-success ms-2">View company</a>` : '');
+      return;
+    }
+    const pct = d.total ? Math.round((d.current / d.total) * 100) : 0;
+    document.getElementById('scrapeBar').style.width          = pct + '%';
+    document.getElementById('scrapeProgressLabel').textContent = 'Scraping…';
+    document.getElementById('scrapeCounts').textContent       = `${d.current} / ${d.total}`;
+    document.getElementById('scrapeCurrentTitle').textContent  = d.title || d.url || '';
+    const log  = document.getElementById('scrapeLog');
+    const line = document.createElement('div');
+    line.className   = d.error ? 'text-danger' : 'text-muted';
+    line.textContent = `[${d.current}/${d.total}] ${d.title || d.url}${d.error ? ' — ' + d.error : ''}`;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  };
+  _es.onerror = () => finishScrape();
+}
+
+function cancelScrape() {
+  if (_es) _es.close();
+  document.getElementById('cancelScrape').classList.add('d-none');
+  document.getElementById('scrapeBar').classList.remove('progress-bar-animated', 'progress-bar-striped');
+  document.getElementById('scrapeProgressLabel').textContent = 'Cancelled.';
+  document.getElementById('scrapeCounts').textContent = '';
+  document.getElementById('scrapeCurrentTitle').textContent = '';
+}
+</script>
+{% endblock %}

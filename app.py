@@ -19,10 +19,12 @@ from pathlib import Path
 
 from flask import Flask, Response, abort, redirect, render_template, request, send_file, session, stream_with_context, url_for
 
-DATA_DIR    = Path(__file__).parent / "data"
-CV_PATH     = DATA_DIR / "_cv.pdf"
-NOTES_PATH  = DATA_DIR / "_notes.txt"
-CONFIG_FILE = Path(__file__).parent / "config.env"
+DATA_DIR        = Path(__file__).parent / "data"
+CVS_DIR         = DATA_DIR / "_cvs"
+CV_INDEX_PATH   = CVS_DIR / "_index.json"
+_LEGACY_CV_PATH = DATA_DIR / "_cv.pdf"   # migration only
+NOTES_PATH      = DATA_DIR / "_notes.txt"
+CONFIG_FILE     = Path(__file__).parent / "config.env"
 
 app = Flask(__name__)
 app.secret_key = "jobscraper-local"
@@ -63,10 +65,66 @@ def _openai_client():
     return OpenAI(api_key=api_key)
 
 
-def _cv_hash() -> str | None:
-    if not CV_PATH.exists():
+def _cv_index() -> dict:
+    """Load CV index, auto-migrating legacy _cv.pdf if present."""
+    if not CV_INDEX_PATH.exists():
+        if _LEGACY_CV_PATH.exists():
+            pdf_bytes = _LEGACY_CV_PATH.read_bytes()
+            h = hashlib.sha256(pdf_bytes).hexdigest()
+            CVS_DIR.mkdir(parents=True, exist_ok=True)
+            dest = CVS_DIR / f"{h}.pdf"
+            if not dest.exists():
+                dest.write_bytes(pdf_bytes)
+            index: dict = {"selected": h, "cvs": {h: {"name": "CV", "uploaded": datetime.now().isoformat()}}}
+            with open(CV_INDEX_PATH, "w", encoding="utf-8") as f:
+                json.dump(index, f, indent=2)
+            _LEGACY_CV_PATH.unlink()
+            return index
+        return {"selected": None, "cvs": {}}
+    with open(CV_INDEX_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _save_cv_index(index: dict) -> None:
+    CVS_DIR.mkdir(parents=True, exist_ok=True)
+    with open(CV_INDEX_PATH, "w", encoding="utf-8") as f:
+        json.dump(index, f, indent=2, ensure_ascii=False)
+
+
+def _selected_cv_path() -> Path | None:
+    idx = _cv_index()
+    h = idx.get("selected")
+    if not h:
         return None
-    return hashlib.sha256(CV_PATH.read_bytes()).hexdigest()
+    p = CVS_DIR / f"{h}.pdf"
+    return p if p.exists() else None
+
+
+def _cv_hash() -> str | None:
+    """Return the SHA-256 hash of the selected CV (it's the filename stem)."""
+    p = _selected_cv_path()
+    return p.stem if p else None
+
+
+def _all_cvs() -> list[dict]:
+    idx = _cv_index()
+    result = []
+    for h, meta in idx.get("cvs", {}).items():
+        p = CVS_DIR / f"{h}.pdf"
+        if not p.exists():
+            continue
+        try:
+            uploaded_str = datetime.fromisoformat(meta.get("uploaded", "")).strftime("%-d %B %Y, %H:%M")
+        except Exception:
+            uploaded_str = "Unknown"
+        result.append({
+            "hash": h,
+            "name": meta.get("name", "CV"),
+            "uploaded": uploaded_str,
+            "selected": h == idx.get("selected"),
+        })
+    result.sort(key=lambda x: (not x["selected"], x["name"]))
+    return result
 
 
 def _current_mode() -> str:
@@ -77,8 +135,9 @@ def _use_notes() -> bool:
     return session.get("use_notes", False)
 
 
-def _score_path(company: str, role_id: str, mode: str, use_notes: bool = False) -> Path:
-    suffix = f"{mode}_notes" if use_notes else mode
+def _score_path(company: str, role_id: str, mode: str, use_notes: bool = False, cv_hash: str | None = None) -> Path:
+    h8 = (cv_hash or _cv_hash() or "nocv")[:8]
+    suffix = f"{mode}_notes_{h8}" if use_notes else f"{mode}_{h8}"
     return DATA_DIR / company / "_scores" / f"{role_id}_{suffix}.json"
 
 
@@ -176,7 +235,8 @@ _PROMPT_BRUTAL = (
 def _do_score(job: dict, client, mode: str = "normal", use_notes: bool = False) -> dict:
     title = job.get("title", "?")
     log.debug("Scoring '%s' [mode=%s, notes=%s] …", title, mode, use_notes)
-    cv_b64 = base64.standard_b64encode(CV_PATH.read_bytes()).decode()
+    cv_path = _selected_cv_path()
+    cv_b64 = base64.standard_b64encode(cv_path.read_bytes()).decode()
     notes = NOTES_PATH.read_text(encoding="utf-8").strip() if (use_notes and NOTES_PATH.exists()) else ""
     notes_section = (
         f"Additional context provided by the candidate (treat as authoritative):\n{notes}\n\n"
@@ -315,9 +375,11 @@ def _company_names() -> list[str]:
 
 @app.context_processor
 def inject_globals():
+    cv_path = _selected_cv_path()
     return {
-        "cv_uploaded": CV_PATH.exists(),
-        "can_score": CV_PATH.exists() and bool(_load_config().get("OPENAI_KEY")),
+        "cv_uploaded": cv_path is not None,
+        "all_cvs": _all_cvs(),
+        "can_score": cv_path is not None and bool(_load_config().get("OPENAI_KEY")),
         "scoring_mode": _current_mode(),
         "use_notes": _use_notes(),
         "existing_companies": _company_names(),
@@ -408,24 +470,115 @@ def cv_upload():
     f = request.files.get("cv")
     if not f or not f.filename.lower().endswith(".pdf"):
         abort(400, "Please upload a PDF file.")
-    DATA_DIR.mkdir(exist_ok=True)
-    f.save(CV_PATH)
-    return redirect(url_for("index"))
+    pdf_bytes = f.read()
+    h = hashlib.sha256(pdf_bytes).hexdigest()
+    CVS_DIR.mkdir(parents=True, exist_ok=True)
+    (CVS_DIR / f"{h}.pdf").write_bytes(pdf_bytes)
+    idx = _cv_index()
+    if h not in idx.get("cvs", {}):
+        name = Path(f.filename).stem.replace("_", " ").replace("-", " ").strip() or "CV"
+        idx.setdefault("cvs", {})[h] = {"name": name, "uploaded": datetime.now().isoformat()}
+    idx["selected"] = h
+    _save_cv_index(idx)
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/cv/select/<cv_hash>", methods=["POST"])
+def cv_select(cv_hash: str):
+    idx = _cv_index()
+    if cv_hash in idx.get("cvs", {}) and (CVS_DIR / f"{cv_hash}.pdf").exists():
+        idx["selected"] = cv_hash
+        _save_cv_index(idx)
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/cv/rename/<cv_hash>", methods=["POST"])
+def cv_rename(cv_hash: str):
+    name = request.form.get("name", "").strip() or "CV"
+    idx = _cv_index()
+    if cv_hash in idx.get("cvs", {}):
+        idx["cvs"][cv_hash]["name"] = name
+        _save_cv_index(idx)
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/cv/delete/<cv_hash>", methods=["POST"])
+def cv_delete(cv_hash: str):
+    idx = _cv_index()
+    cvs = idx.get("cvs", {})
+    if cv_hash in cvs:
+        p = CVS_DIR / f"{cv_hash}.pdf"
+        if p.exists():
+            p.unlink()
+        del cvs[cv_hash]
+        if idx.get("selected") == cv_hash:
+            idx["selected"] = next(iter(cvs), None)
+        _save_cv_index(idx)
+    return redirect(request.referrer or url_for("index"))
 
 
 @app.route("/cv")
 def cv_view():
-    if not CV_PATH.exists():
+    p = _selected_cv_path()
+    if not p:
         abort(404)
-    return send_file(CV_PATH, mimetype="application/pdf")
+    return send_file(p, mimetype="application/pdf")
+
+
+@app.route("/cv/<cv_hash>")
+def cv_view_specific(cv_hash: str):
+    p = CVS_DIR / f"{cv_hash}.pdf"
+    if not p.exists():
+        abort(404)
+    return send_file(p, mimetype="application/pdf")
 
 
 # ------------------------------------------------------------------ #
-# Routes — JD upload                                                   #
+# Routes — Add Jobs page                                               #
 # ------------------------------------------------------------------ #
 
+def _save_job(company_raw: str, job_data: dict, pdf_bytes: bytes | None = None) -> tuple[str, str]:
+    """Persist a job to disk. Returns (company_slug, role_id)."""
+    company_description = job_data.pop("company_description", None)
+    title = job_data.get("title", "Unknown Role")
+    log.info("Saving job: %r  company: %r", title, company_raw)
+
+    company = re.sub(r"[^\w\s-]", "", company_raw.lower())
+    company = re.sub(r"[\s-]+", "_", company).strip("_") or "company"
+    company_dir = DATA_DIR / company
+    company_dir.mkdir(parents=True, exist_ok=True)
+
+    role_id = _make_role_id(title)
+    base_id = role_id
+    counter = 1
+    while (company_dir / f"{role_id}.json").exists():
+        role_id = f"{base_id}_{counter}"
+        counter += 1
+
+    if pdf_bytes:
+        (company_dir / f"{role_id}.pdf").write_bytes(pdf_bytes)
+    with open(company_dir / f"{role_id}.json", "w", encoding="utf-8") as f:
+        json.dump(job_data, f, indent=2, ensure_ascii=False)
+
+    info_path = company_dir / "_company.json"
+    if not info_path.exists():
+        info: dict = {"company": company_raw}
+        if company_description:
+            info["description"] = company_description
+        with open(info_path, "w", encoding="utf-8") as f:
+            json.dump(info, f, indent=2, ensure_ascii=False)
+
+    return company, role_id
+
+
+@app.route("/add-jobs")
+def add_jobs():
+    return render_template("add_jobs.html")
+
+
+@app.route("/add-jobs/url", methods=["POST"])
 @app.route("/upload-jd", methods=["POST"])
-def upload_jd():
+def add_job_url():
     company_raw = request.form.get("company", "").strip()
     pdf_file    = request.files.get("jd_pdf")
     url         = request.form.get("jd_url", "").strip()
@@ -439,7 +592,6 @@ def upload_jd():
     if not client:
         abort(400, "OPENAI_KEY not set in config.env.")
 
-    # Obtain plain text (and PDF bytes when available) for analysis
     pdf_bytes = None
     if pdf_file:
         fname = pdf_file.filename.lower()
@@ -447,7 +599,7 @@ def upload_jd():
             pdf_bytes = pdf_file.read()
             from pypdf import PdfReader
             reader = PdfReader(io.BytesIO(pdf_bytes))
-            jd_text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+            jd_text = "\n".join(p.extract_text() or "" for p in reader.pages).strip()
         elif fname.endswith(".txt"):
             jd_text = pdf_file.read().decode("utf-8", errors="replace").strip()
         else:
@@ -456,46 +608,126 @@ def upload_jd():
         log.info("Rendering URL to PDF: %s", url)
         pdf_bytes, jd_text = _url_to_pdf_and_text(url)
 
-    # Full structured extraction (same schema as the scraper)
     job_data = _analyse_jd(jd_text, client, url=url)
-    job_data["company"] = company_raw          # always use the user-supplied name
+    job_data["company"] = company_raw
     job_data["source"]  = "url" if url else "manual"
-    company_description = job_data.pop("company_description", None)
-
-    title = job_data.get("title", "Unknown Role")
-    log.info("Extracted title: %r  company: %r", title, company_raw)
-
-    # Build filesystem-safe company slug
-    company = re.sub(r"[^\w\s-]", "", company_raw.lower())
-    company = re.sub(r"[\s-]+", "_", company).strip("_") or "company"
-
-    company_dir = DATA_DIR / company
-    company_dir.mkdir(parents=True, exist_ok=True)
-
-    # Build a unique role_id
-    role_id = _make_role_id(title)
-    base_id = role_id
-    counter = 1
-    while (company_dir / f"{role_id}.json").exists():
-        role_id = f"{base_id}_{counter}"
-        counter += 1
-
-    # Save PDF (when available) and JSON
-    if pdf_bytes:
-        (company_dir / f"{role_id}.pdf").write_bytes(pdf_bytes)
-    with open(company_dir / f"{role_id}.json", "w", encoding="utf-8") as f:
-        json.dump(job_data, f, indent=2, ensure_ascii=False)
-
-    # Bootstrap _company.json if absent
-    info_path = company_dir / "_company.json"
-    if not info_path.exists():
-        info: dict = {"company": company_raw}
-        if company_description:
-            info["description"] = company_description
-        with open(info_path, "w", encoding="utf-8") as f:
-            json.dump(info, f, indent=2, ensure_ascii=False)
-
+    company, role_id = _save_job(company_raw, job_data, pdf_bytes)
     return redirect(url_for("job_view", company=company, role_id=role_id))
+
+
+@app.route("/add-jobs/text", methods=["POST"])
+def add_job_text():
+    company_raw = request.form.get("company", "").strip()
+    text        = request.form.get("text", "").strip()
+
+    if not company_raw:
+        abort(400, "Company name is required.")
+    if not text:
+        abort(400, "Job description text is required.")
+
+    client = _openai_client()
+    if not client:
+        abort(400, "OPENAI_KEY not set in config.env.")
+
+    job_data = _analyse_jd(text, client)
+    job_data["company"] = company_raw
+    job_data["source"]  = "text"
+    company, role_id = _save_job(company_raw, job_data)
+    return redirect(url_for("job_view", company=company, role_id=role_id))
+
+
+@app.route("/add-jobs/scrape/categories", methods=["POST"])
+def scrape_categories():
+    data    = request.get_json(force=True) or {}
+    board   = data.get("board", "lever")
+    company = data.get("company", "").strip()
+    url     = data.get("url", "").strip()
+
+    if board == "lever":
+        from lever_scraper import LeverScraper
+        if not company:
+            return json.dumps({"error": "Company slug is required."}), 400
+        base_url = f"https://jobs.lever.co/{company}"
+        try:
+            cats = LeverScraper().fetch_categories(base_url)
+        except Exception as e:
+            return json.dumps({"error": str(e)}), 500
+    else:
+        from generic_scraper import GenericScraper
+        if not url:
+            return json.dumps({"error": "Careers page URL is required."}), 400
+        if not company:
+            return json.dumps({"error": "Company name is required."}), 400
+        client = _openai_client()
+        if not client:
+            return json.dumps({"error": "OPENAI_KEY is required for generic scraping."}), 400
+        base_url = url
+        try:
+            cats = GenericScraper().setup(DATA_DIR, client).fetch_categories(base_url)
+        except Exception as e:
+            return json.dumps({"error": str(e)}), 500
+
+    return json.dumps({"categories": cats, "base_url": base_url})
+
+
+@app.route("/add-jobs/scrape/confirm", methods=["POST"])
+def scrape_confirm():
+    data = request.get_json(force=True) or {}
+    session["_scrape"] = {
+        "board":      data.get("board", "lever"),
+        "company":    data.get("company", ""),
+        "base_url":   data.get("base_url", ""),
+        "categories": data.get("categories") or None,
+        "limit":      data.get("limit"),
+    }
+    return json.dumps({"ok": True})
+
+
+@app.route("/add-jobs/scrape/stream")
+def scrape_stream():
+    params = session.get("_scrape")
+    if not params:
+        abort(400, "No scrape session.")
+
+    board      = params.get("board", "lever")
+    company    = params.get("company", "")
+    base_url   = params.get("base_url", "")
+    categories = params.get("categories")
+    limit      = params.get("limit")
+    client     = _openai_client()
+
+    # Slugify company name for use as directory (generic board supplies a display name)
+    company_slug = re.sub(r"[^\w\s-]", "", company.lower())
+    company_slug = re.sub(r"[\s-]+", "_", company_slug).strip("_") or "company"
+
+    def generate():
+        try:
+            if board == "lever":
+                from lever_scraper import LeverScraper
+                scraper = LeverScraper().setup(DATA_DIR, client)
+            else:
+                from generic_scraper import GenericScraper
+                scraper = GenericScraper().setup(DATA_DIR, client)
+            links = scraper.fetch_links(base_url, categories)
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e), 'done': True, 'total': 0})}\n\n"
+            return
+        if limit:
+            links = links[:int(limit)]
+        total = len(links)
+        if not total:
+            yield f"data: {json.dumps({'done': True, 'total': 0})}\n\n"
+            return
+        for event in scraper.scrape_iter(links, company_slug):
+            event["total"] = total
+            yield f"data: {json.dumps(event)}\n\n"
+        yield f"data: {json.dumps({'done': True, 'total': total, 'company': company_slug})}\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ------------------------------------------------------------------ #
@@ -504,7 +736,7 @@ def upload_jd():
 
 @app.route("/score/<company>/<role_id>", methods=["POST"])
 def score_one(company: str, role_id: str):
-    if not CV_PATH.exists():
+    if not _selected_cv_path():
         abort(400, "No CV uploaded.")
     client = _openai_client()
     if not client:
@@ -544,7 +776,7 @@ def clear_scores(company: str):
 
 @app.route("/score/<company>/stream")
 def score_company_stream(company: str):
-    if not CV_PATH.exists():
+    if not _selected_cv_path():
         abort(400, "No CV uploaded.")
     client = _openai_client()
     if not client:

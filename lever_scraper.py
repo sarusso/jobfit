@@ -44,7 +44,7 @@ class LeverScraper(BaseScraper):
         ]
 
     def fetch_links(self, base_url: str, allowed_categories: Optional[list[str]]) -> list[str]:
-        soup = self._soup
+        soup = getattr(self, "_soup", None) or self._fetch_soup(base_url)
         seen: set[str] = set()
         links: list[str] = []
 

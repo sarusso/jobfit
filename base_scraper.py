@@ -161,6 +161,44 @@ class BaseScraper(ABC):
         return dest_dir
 
     # ------------------------------------------------------------------ #
+    # Web / programmatic interface                                         #
+    # ------------------------------------------------------------------ #
+
+    def setup(self, data_dir: Path, openai_client=None) -> "BaseScraper":
+        """Configure the scraper for use as a module (instead of via CLI)."""
+        self._data_dir = data_dir
+        self._openai_client = openai_client
+        return self
+
+    def scrape_iter(self, links: list[str], company: str):
+        """Scrape a list of URLs and yield progress dicts. Call setup() first."""
+        import tempfile
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            context = browser.new_context()
+            page = context.new_page()
+            for i, url in enumerate(links, 1):
+                event: dict = {"current": i, "url": url, "title": url}
+                try:
+                    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                        pdf_tmp = Path(tmp.name)
+                    page_text = self.render_to_pdf(url, pdf_tmp, page)
+                    job = None
+                    if self._openai_client:
+                        try:
+                            job = self.analyse_job(page_text, url)
+                            event["title"] = job.get("title", url)
+                        except Exception as e:
+                            event["analyse_error"] = str(e)
+                    self._save(url, pdf_tmp, company, job)
+                    pdf_tmp.unlink(missing_ok=True)
+                except Exception as e:
+                    event["error"] = str(e)
+                yield event
+            context.close()
+            browser.close()
+
+    # ------------------------------------------------------------------ #
     # CLI                                                                  #
     # ------------------------------------------------------------------ #
 
