@@ -11,7 +11,7 @@ Example:
 
 import argparse
 import re
-from typing import Optional
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -35,44 +35,29 @@ class LeverScraper(BaseScraper):
     def get_company_name(self, args: argparse.Namespace) -> str:
         return args.company
 
-    def fetch_categories(self, base_url: str) -> list[str]:
+    def fetch_jobs(self, base_url: str) -> list[dict]:
         soup = self._fetch_soup(base_url)
-        self._soup = soup  # cache for fetch_links
-        return [
-            tag.get_text(strip=True)
-            for tag in soup.find_all(class_="posting-category-title large-category-label")
-        ]
+        self._soup = soup
 
-    def fetch_links(self, base_url: str, allowed_categories: Optional[list[str]]) -> list[str]:
-        soup = getattr(self, "_soup", None) or self._fetch_soup(base_url)
+        jobs: list[dict] = []
         seen: set[str] = set()
-        links: list[str] = []
-
-        if allowed_categories is None:
-            for tag in soup.find_all("a", href=True):
-                href = tag["href"]
-                if _LINK_PATTERN.search(href) and href not in seen:
-                    seen.add(href)
-                    links.append(href)
-            return links
-
-        allowed_set = set(allowed_categories)
-        in_section = False
+        current_category = "General"
 
         for element in soup.descendants:
-            if getattr(element, "get", None) and "posting-category-title" in " ".join(
-                element.get("class", [])
-            ) and "large-category-label" in " ".join(element.get("class", [])):
-                in_section = element.get_text(strip=True) in allowed_set
+            if not hasattr(element, "get"):
                 continue
-
-            if in_section and getattr(element, "name", None) == "a" and element.get("href"):
+            classes = " ".join(element.get("class") or [])
+            if "posting-category-title" in classes and "large-category-label" in classes:
+                current_category = element.get_text(strip=True) or "General"
+                continue
+            if element.name == "a" and element.get("href"):
                 href = element["href"]
                 if _LINK_PATTERN.search(href) and href not in seen:
                     seen.add(href)
-                    links.append(href)
+                    title = element.get_text(strip=True) or href
+                    jobs.append({"title": title, "url": href, "category": current_category})
 
-        return links
+        return jobs
 
     # ------------------------------------------------------------------ #
 

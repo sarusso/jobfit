@@ -30,6 +30,9 @@ app = Flask(__name__)
 app.secret_key = "jobscraper-local"
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024  # 32 MB
 
+# Server-side store for scrape sessions (avoids cookie-size limits)
+_scrape_sessions: dict[str, dict] = {}
+
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -649,7 +652,7 @@ def scrape_categories():
             return json.dumps({"error": "Company slug is required."}), 400
         base_url = f"https://jobs.lever.co/{company}"
         try:
-            cats = LeverScraper().fetch_categories(base_url)
+            jobs = LeverScraper().setup(DATA_DIR).fetch_jobs(base_url)
         except Exception as e:
             return json.dumps({"error": str(e)}), 500
     else:
@@ -663,62 +666,59 @@ def scrape_categories():
             return json.dumps({"error": "OPENAI_KEY is required for generic scraping."}), 400
         base_url = url
         try:
-            cats = GenericScraper().setup(DATA_DIR, client).fetch_categories(base_url)
+            jobs = GenericScraper().setup(DATA_DIR, client).fetch_jobs(base_url)
         except Exception as e:
             return json.dumps({"error": str(e)}), 500
 
-    return json.dumps({"categories": cats, "base_url": base_url})
+    return json.dumps({"jobs": jobs, "base_url": base_url})
 
 
 @app.route("/add-jobs/scrape/confirm", methods=["POST"])
 def scrape_confirm():
-    data = request.get_json(force=True) or {}
-    session["_scrape"] = {
-        "board":      data.get("board", "lever"),
-        "company":    data.get("company", ""),
-        "base_url":   data.get("base_url", ""),
-        "categories": data.get("categories") or None,
-        "limit":      data.get("limit"),
+    import uuid
+    data      = request.get_json(force=True) or {}
+    scrape_id = str(uuid.uuid4())
+    limit     = data.get("limit")
+    jobs      = data.get("jobs") or []
+    if limit:
+        jobs = jobs[:int(limit)]
+    _scrape_sessions[scrape_id] = {
+        "board":   data.get("board", "lever"),
+        "company": data.get("company", ""),
+        "jobs":    jobs,
     }
+    session["_scrape_id"] = scrape_id
     return json.dumps({"ok": True})
 
 
 @app.route("/add-jobs/scrape/stream")
 def scrape_stream():
-    params = session.get("_scrape")
+    scrape_id = session.get("_scrape_id")
+    params    = _scrape_sessions.pop(scrape_id, None) if scrape_id else None
     if not params:
         abort(400, "No scrape session.")
 
-    board      = params.get("board", "lever")
-    company    = params.get("company", "")
-    base_url   = params.get("base_url", "")
-    categories = params.get("categories")
-    limit      = params.get("limit")
-    client     = _openai_client()
+    board   = params.get("board", "lever")
+    company = params.get("company", "")
+    jobs    = params.get("jobs", [])
+    client  = _openai_client()
 
-    # Slugify company name for use as directory (generic board supplies a display name)
+    # Slugify company name for directory
     company_slug = re.sub(r"[^\w\s-]", "", company.lower())
     company_slug = re.sub(r"[\s-]+", "_", company_slug).strip("_") or "company"
 
     def generate():
-        try:
-            if board == "lever":
-                from lever_scraper import LeverScraper
-                scraper = LeverScraper().setup(DATA_DIR, client)
-            else:
-                from generic_scraper import GenericScraper
-                scraper = GenericScraper().setup(DATA_DIR, client)
-            links = scraper.fetch_links(base_url, categories)
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e), 'done': True, 'total': 0})}\n\n"
-            return
-        if limit:
-            links = links[:int(limit)]
-        total = len(links)
+        total = len(jobs)
         if not total:
             yield f"data: {json.dumps({'done': True, 'total': 0})}\n\n"
             return
-        for event in scraper.scrape_iter(links, company_slug):
+        if board == "lever":
+            from lever_scraper import LeverScraper
+            scraper = LeverScraper().setup(DATA_DIR, client)
+        else:
+            from generic_scraper import GenericScraper
+            scraper = GenericScraper().setup(DATA_DIR, client)
+        for event in scraper.scrape_iter(jobs, company_slug):
             event["total"] = total
             yield f"data: {json.dumps(event)}\n\n"
         yield f"data: {json.dumps({'done': True, 'total': total, 'company': company_slug})}\n\n"

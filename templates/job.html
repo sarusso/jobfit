@@ -94,6 +94,34 @@
     </div>
     {% endif %}
 
+    {# ── Requirements ── #}
+    {% if job.requirements %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Requirements</div>
+        <ul class="mb-0 ps-3">
+          {% for item in job.requirements %}
+          <li class="mb-1 small">{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Nice to have ── #}
+    {% if job.nice_to_have %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Nice to Have</div>
+        <ul class="mb-0 ps-3">
+          {% for item in job.nice_to_have %}
+          <li class="mb-1 small">{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
   </div>
   <div class="col-lg-4">
 
@@ -106,7 +134,7 @@
             {{ score_badge(job._score, "fs-5 px-3 py-2") }}
             <span class="text-muted small">out of 10</span>
             {% if job._score.mode == 'brutal' %}
-            <span class="badge bg-danger" style="font-size:.65rem;">🔥 brutal</span>
+            <span class="badge bg-danger" style="font-size:.65rem;">brutal</span>
             {% endif %}
             <a href="/help" class="text-decoration-none" title="How is this score calculated?"
                style="display:inline-flex;align-items:center;justify-content:center;width:1.1rem;height:1.1rem;border-radius:50%;border:1.5px solid #adb5bd;color:#adb5bd;font-size:.65rem;font-weight:700;line-height:1;">?</a>
@@ -143,34 +171,6 @@
         {% endif %}
       </div>
     </div>
-
-    {# ── Requirements ── #}
-    {% if job.requirements %}
-    <div class="card shadow-sm mb-4">
-      <div class="card-body">
-        <div class="section-title">Requirements</div>
-        <ul class="mb-0 ps-3">
-          {% for item in job.requirements %}
-          <li class="mb-1 small">{{ item }}</li>
-          {% endfor %}
-        </ul>
-      </div>
-    </div>
-    {% endif %}
-
-    {# ── Nice to have ── #}
-    {% if job.nice_to_have %}
-    <div class="card shadow-sm mb-4">
-      <div class="card-body">
-        <div class="section-title">Nice to Have</div>
-        <ul class="mb-0 ps-3">
-          {% for item in job.nice_to_have %}
-          <li class="mb-1 small">{{ item }}</li>
-          {% endfor %}
-        </ul>
-      </div>
-    </div>
-    {% endif %}
 
   </div>
 </div>

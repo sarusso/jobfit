@@ -11,7 +11,6 @@ Usage (CLI):
 
 import json
 import re
-from typing import Optional
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -64,7 +63,10 @@ class GenericScraper(BaseScraper):
         slug = re.sub(r"[^\w\s-]", "", args.company.lower())
         return re.sub(r"[\s-]+", "_", slug).strip("_") or "company"
 
-    def fetch_categories(self, base_url: str) -> list[str]:
+    def fetch_jobs(self, base_url: str) -> list[dict]:
+        if hasattr(self, "_jobs") and getattr(self, "_base_url_cache", None) == base_url:
+            return self._jobs
+
         html = _rendered_html(base_url)
 
         prompt = (
@@ -102,25 +104,7 @@ class GenericScraper(BaseScraper):
             if job.get("url")
         ]
         self._base_url_cache = base_url
-        return data.get("categories", [])
-
-    def fetch_links(self, base_url: str, allowed_categories: Optional[list[str]]) -> list[str]:
-        if not hasattr(self, "_jobs") or getattr(self, "_base_url_cache", None) != base_url:
-            self.fetch_categories(base_url)
-
-        jobs = self._jobs
-        if allowed_categories:
-            allowed = set(allowed_categories)
-            jobs = [j for j in jobs if j.get("category") in allowed]
-
-        seen: set[str] = set()
-        urls: list[str] = []
-        for job in jobs:
-            url = job.get("url", "")
-            if url and url not in seen:
-                seen.add(url)
-                urls.append(url)
-        return urls
+        return self._jobs
 
 
 if __name__ == "__main__":

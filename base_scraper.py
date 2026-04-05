@@ -3,10 +3,9 @@
 base_scraper.py — Abstract base class for job board scrapers.
 
 Subclasses must implement:
-    get_base_url(args)               — derive the board URL from parsed CLI args
-    get_company_name(args)           — return the company slug/name for the data folder
-    fetch_categories(base_url)       — return available category names
-    fetch_links(base_url, allowed)   — return job URLs, filtered by allowed categories
+    get_base_url(args)       — derive the board URL from parsed CLI args
+    get_company_name(args)   — return the company slug/name for the data folder
+    fetch_jobs(base_url)     — return all jobs as [{title, url, category}]
 
 Each run always saves a PDF per job to data/<company>/<role_id>.pdf.
 If OPENAI_KEY is set in config.env, a JSON analysis is saved alongside it.
@@ -55,12 +54,34 @@ class BaseScraper(ABC):
         """Return the company name used as the data subfolder."""
 
     @abstractmethod
-    def fetch_categories(self, base_url: str) -> list[str]:
-        """Return the list of category/section names available on the board."""
+    def fetch_jobs(self, base_url: str) -> list[dict]:
+        """Return all jobs as a list of {title, url, category} dicts."""
 
-    @abstractmethod
+    # Default convenience wrappers (backed by fetch_jobs)
+
+    def fetch_categories(self, base_url: str) -> list[str]:
+        seen: list[str] = []
+        seen_set: set[str] = set()
+        for job in self.fetch_jobs(base_url):
+            c = job.get("category") or "General"
+            if c not in seen_set:
+                seen_set.add(c)
+                seen.append(c)
+        return seen
+
     def fetch_links(self, base_url: str, allowed_categories: Optional[list[str]]) -> list[str]:
-        """Return job URLs, optionally restricted to allowed_categories."""
+        jobs = self.fetch_jobs(base_url)
+        if allowed_categories:
+            allowed = set(allowed_categories)
+            jobs = [j for j in jobs if j.get("category") in allowed]
+        seen: set[str] = set()
+        urls: list[str] = []
+        for j in jobs:
+            u = j.get("url", "")
+            if u and u not in seen:
+                seen.add(u)
+                urls.append(u)
+        return urls
 
     # ------------------------------------------------------------------ #
     # Category prompting (common)                                          #
@@ -170,15 +191,17 @@ class BaseScraper(ABC):
         self._openai_client = openai_client
         return self
 
-    def scrape_iter(self, links: list[str], company: str):
-        """Scrape a list of URLs and yield progress dicts. Call setup() first."""
+    def scrape_iter(self, jobs: list[dict], company: str):
+        """Scrape a list of jobs [{url, title?, ...}] and yield progress dicts.
+        Call setup() first."""
         import tempfile
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             context = browser.new_context()
             page = context.new_page()
-            for i, url in enumerate(links, 1):
-                event: dict = {"current": i, "url": url, "title": url}
+            for i, job_stub in enumerate(jobs, 1):
+                url = job_stub.get("url", "")
+                event: dict = {"current": i, "url": url, "title": job_stub.get("title") or url}
                 try:
                     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
                         pdf_tmp = Path(tmp.name)
@@ -187,7 +210,7 @@ class BaseScraper(ABC):
                     if self._openai_client:
                         try:
                             job = self.analyse_job(page_text, url)
-                            event["title"] = job.get("title", url)
+                            event["title"] = job.get("title") or event["title"]
                         except Exception as e:
                             event["analyse_error"] = str(e)
                     self._save(url, pdf_tmp, company, job)
@@ -246,59 +269,40 @@ class BaseScraper(ABC):
                 self._openai_client = OpenAI(api_key=api_key)
 
         base_url = self.get_base_url(args)
-        company = self.get_company_name(args)
-        print(f"Fetching links from: {base_url}")
+        company  = self.get_company_name(args)
+        print(f"Fetching jobs from: {base_url}")
 
-        categories = self.fetch_categories(base_url)
+        all_jobs   = self.fetch_jobs(base_url)
+        categories = list(dict.fromkeys(j.get("category") or "General" for j in all_jobs))
 
         if args.section is not None:
             indices = [int(x.strip()) - 1 for x in args.section.split(",") if x.strip().isdigit()]
-            allowed_categories = [categories[i] for i in indices if 0 <= i < len(categories)]
-            if allowed_categories:
-                print(f"Sections (from -s): {', '.join(allowed_categories)}")
+            allowed_set = {categories[i] for i in indices if 0 <= i < len(categories)}
+            if allowed_set:
+                print(f"Sections (from -s): {', '.join(sorted(allowed_set))}")
             else:
                 print("WARNING: -s produced no valid sections — including all.")
-                allowed_categories = None
+                allowed_set = set()
         else:
-            allowed_categories = self._prompt_categories(categories)
+            chosen = self._prompt_categories(categories)
+            allowed_set = set(chosen) if chosen else set()
 
-        links = self.fetch_links(base_url, allowed_categories)
-        if not links:
+        jobs = [j for j in all_jobs if not allowed_set or j.get("category") in allowed_set]
+        if not jobs:
             print("No links matched. Exiting.")
             sys.exit(1)
-        print(f"Found {len(links)} matching link(s).")
+        print(f"Found {len(jobs)} matching job(s).")
 
         if args.limit is not None:
-            links = links[: args.limit]
-            print(f"Limiting to {len(links)} link(s).")
+            jobs = jobs[: args.limit]
+            print(f"Limiting to {len(jobs)} job(s).")
 
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch()
-            context = browser.new_context()
-            page = context.new_page()
-
-            for i, url in enumerate(links, start=1):
-                print(f"  [{i}/{len(links)}] {url}")
-                try:
-                    pdf_tmp = self._data_dir / f"_tmp_{i:04d}.pdf"
-                    page_text = self.render_to_pdf(url, pdf_tmp, page)
-                except Exception as e:
-                    print(f"    WARNING: failed to render {url}: {e}")
-                    continue
-
-                job = None
-                if self._openai_client:
-                    try:
-                        job = self.analyse_job(page_text, url)
-                        print(f"    analysed: {job.get('title', '?')} @ {job.get('company', '?')}")
-                    except Exception as e:
-                        print(f"    WARNING: OpenAI analysis failed for {url}: {e}")
-
-                dest = self._save(url, pdf_tmp, company, job)
-                pdf_tmp.unlink()
-                print(f"    saved → {dest}")
-
-            context.close()
-            browser.close()
+        for event in self.scrape_iter(jobs, company):
+            i, total = event["current"], len(jobs)
+            title = event.get("title") or event.get("url", "")
+            if event.get("error"):
+                print(f"  [{i}/{total}] ERROR: {event['error']} — {title}")
+            else:
+                print(f"  [{i}/{total}] {title}")
 
         print("Done.")

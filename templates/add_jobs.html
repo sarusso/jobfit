@@ -95,18 +95,18 @@
             <label class="form-label fw-semibold">Board</label>
             <select id="scrapeBoard" class="form-select" onchange="updateBoardFields()">
               <option value="lever">Lever</option>
-              <option value="generic">Generic</option>
+              <option value="generic" selected>Generic</option>
             </select>
           </div>
 
           {# Lever fields #}
-          <div class="col-sm-9" id="fieldLeverSlug">
+          <div class="col-sm-9 d-none" id="fieldLeverSlug">
             <label class="form-label fw-semibold">Company slug</label>
             <input type="text" id="scrapeCompany" class="form-control" placeholder="e.g. mistral">
           </div>
 
           {# Generic fields #}
-          <div class="col-sm-9 d-none" id="fieldGeneric">
+          <div class="col-sm-9" id="fieldGeneric">
             <div class="row g-2">
               <div class="col-sm-8">
                 <label class="form-label fw-semibold">Careers page URL</label>
@@ -128,19 +128,21 @@
           </div>
         </details>
 
-        <button class="btn btn-outline-primary" onclick="fetchCategories()">
+        <button class="btn btn-outline-primary" id="fetchBtn" onclick="fetchCategories()">
           <span id="fetchSpinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
-          Fetch categories
+          <span id="fetchBtnLabel">Fetch Jobs</span>
         </button>
         <p id="fetchError" class="text-danger small mt-2 mb-0 d-none"></p>
       </div>
 
-      {# Step 2: categories #}
+      {# Step 2: job list #}
       <div id="scrapeStep2" class="d-none">
         <hr class="my-4">
-        <p class="fw-semibold mb-1">Select categories to scrape:</p>
-        <p class="text-muted small mb-3" id="scrapeJobCount"></p>
-        <div id="categoryList" class="mb-3 d-flex flex-wrap gap-2"></div>
+        <div class="d-flex align-items-baseline justify-content-between mb-2">
+          <p class="fw-semibold mb-0">Select jobs to scrape:</p>
+          <span class="text-muted small" id="scrapeJobCount"></span>
+        </div>
+        <div id="jobList" class="mb-3"></div>
         <div class="d-flex gap-2 mb-4">
           <button class="btn btn-sm btn-outline-secondary" onclick="selectAll(true)">All</button>
           <button class="btn btn-sm btn-outline-secondary" onclick="selectAll(false)">None</button>
@@ -166,6 +168,7 @@
         </div>
         <div id="scrapeLog" class="font-monospace small border rounded p-2 bg-light"
              style="max-height:180px;overflow-y:auto"></div>
+        <div id="scrapeViewCompany" class="mt-2 d-none"></div>
       </div>
 
     </div>{# end tab-scrape #}
@@ -191,6 +194,7 @@
 });
 
 let _baseUrl = '';
+let _allJobs = [];   // [{title, url, category}]
 let _es = null;
 
 function updateBoardFields() {
@@ -219,6 +223,9 @@ async function fetchCategories() {
     payload.company = company;
   }
 
+  const btn = document.getElementById('fetchBtn');
+  btn.disabled = true;
+  document.getElementById('fetchBtnLabel').textContent = 'Fetching…';
   spinner.classList.remove('d-none');
   try {
     const resp = await fetch('/add-jobs/scrape/categories', {
@@ -228,39 +235,90 @@ async function fetchCategories() {
     });
     const data = await resp.json();
     spinner.classList.add('d-none');
+    btn.disabled = false;
+    document.getElementById('fetchBtnLabel').textContent = 'Fetch Jobs';
     if (data.error) {
       errEl.textContent = data.error;
       errEl.classList.remove('d-none');
       return;
     }
     _baseUrl = data.base_url;
-    renderCategories(data.categories);
+    _allJobs = data.jobs || [];
+    renderJobs(_allJobs);
     document.getElementById('scrapeStep2').classList.remove('d-none');
   } catch (e) {
     spinner.classList.add('d-none');
+    btn.disabled = false;
+    document.getElementById('fetchBtnLabel').textContent = 'Fetch Jobs';
     errEl.textContent = 'Request failed: ' + e.message;
     errEl.classList.remove('d-none');
   }
 }
 
-function renderCategories(cats) {
-  const el = document.getElementById('categoryList');
-  if (!cats.length) {
-    el.innerHTML = '<span class="text-muted small">No categories found — all jobs will be scraped.</span>';
+function renderJobs(jobs) {
+  const el = document.getElementById('jobList');
+  if (!jobs.length) {
+    el.innerHTML = '<span class="text-muted small">No jobs found.</span>';
     document.getElementById('scrapeJobCount').textContent = '';
     return;
   }
-  el.innerHTML = cats.map(c => `
-    <div class="form-check form-check-inline border rounded px-3 py-1 m-0 bg-white">
-      <input class="form-check-input category-check" type="checkbox" value="${c}" id="cat-${c}" checked>
-      <label class="form-check-label small" for="cat-${c}">${c}</label>
-    </div>`).join('');
+
+  // Group by category
+  const groups = {};
+  const order  = [];
+  for (const job of jobs) {
+    const cat = job.category || 'General';
+    if (!groups[cat]) { groups[cat] = []; order.push(cat); }
+    groups[cat].push(job);
+  }
+
+  const catCount = order.length;
   document.getElementById('scrapeJobCount').textContent =
-    `${cats.length} categor${cats.length === 1 ? 'y' : 'ies'} found.`;
+    `${jobs.length} job${jobs.length !== 1 ? 's' : ''} · ${catCount} categor${catCount !== 1 ? 'ies' : 'y'}`;
+
+  el.innerHTML = order.map((cat, ci) => {
+    const catId = `cat-${ci}`;
+    const rows = groups[cat].map((job, ji) => {
+      const jobId = `job-${ci}-${ji}`;
+      const safeTitle = job.title.replace(/"/g, '&quot;');
+      const safeUrl   = job.url.replace(/"/g, '&quot;');
+      return `<div class="d-flex align-items-center ps-4 py-1 border-bottom border-light">
+        <input class="form-check-input job-check flex-shrink-0 me-2" type="checkbox"
+               data-cat="${ci}" value="${safeUrl}" data-title="${safeTitle}"
+               id="${jobId}" checked onchange="updateCatToggle(${ci})">
+        <label class="form-check-label small text-truncate" for="${jobId}" style="max-width:100%"
+               title="${safeTitle}">${job.title}</label>
+      </div>`;
+    }).join('');
+    return `<div class="border rounded mb-2 overflow-hidden">
+      <div class="d-flex align-items-center px-3 py-2 bg-light">
+        <input class="form-check-input flex-shrink-0 me-2 cat-toggle" type="checkbox"
+               id="${catId}" data-ci="${ci}" checked onchange="toggleCategory(this)">
+        <label class="form-check-label fw-semibold small mb-0 me-2" for="${catId}">${cat}</label>
+        <span class="badge bg-secondary ms-auto" style="font-weight:400">${groups[cat].length}</span>
+      </div>
+      ${rows}
+    </div>`;
+  }).join('');
+}
+
+function toggleCategory(catCb) {
+  const ci = catCb.dataset.ci;
+  catCb.indeterminate = false;
+  document.querySelectorAll(`.job-check[data-cat="${ci}"]`).forEach(cb => cb.checked = catCb.checked);
+}
+
+function updateCatToggle(ci) {
+  const jobs    = [...document.querySelectorAll(`.job-check[data-cat="${ci}"]`)];
+  const checked = jobs.filter(cb => cb.checked).length;
+  const catCb   = document.querySelector(`.cat-toggle[data-ci="${ci}"]`);
+  catCb.checked       = checked > 0;
+  catCb.indeterminate = checked > 0 && checked < jobs.length;
 }
 
 function selectAll(checked) {
-  document.querySelectorAll('.category-check').forEach(cb => cb.checked = checked);
+  document.querySelectorAll('.job-check').forEach(cb => cb.checked = checked);
+  document.querySelectorAll('.cat-toggle').forEach(cb => { cb.checked = checked; cb.indeterminate = false; });
 }
 
 function resetScraper() {
@@ -269,26 +327,41 @@ function resetScraper() {
 }
 
 async function startScrape() {
-  const board      = document.getElementById('scrapeBoard').value;
-  const company    = board === 'lever'
+  const board   = document.getElementById('scrapeBoard').value;
+  const company = board === 'lever'
     ? document.getElementById('scrapeCompany').value.trim()
     : document.getElementById('scrapeCompanyName').value.trim();
-  const limit      = parseInt(document.getElementById('scrapeLimit').value) || null;
-  const categories = [...document.querySelectorAll('.category-check:checked')].map(cb => cb.value);
+  const limit   = parseInt(document.getElementById('scrapeLimit').value) || null;
+  const jobs    = [...document.querySelectorAll('.job-check:checked')].map(cb => ({
+    url: cb.value, title: cb.dataset.title,
+  }));
 
   await fetch('/add-jobs/scrape/confirm', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({board, company, base_url: _baseUrl, categories, limit}),
+    body: JSON.stringify({board, company, base_url: _baseUrl, jobs, limit}),
   });
 
   document.getElementById('scrapeStep2').classList.add('d-none');
   document.getElementById('scrapeStep3').classList.remove('d-none');
-  document.getElementById('scrapeLog').innerHTML = '';
   document.getElementById('scrapeBar').style.width = '0%';
-  document.getElementById('scrapeProgressLabel').textContent = 'Fetching job links…';
+  document.getElementById('scrapeProgressLabel').textContent = 'Scraping…';
   document.getElementById('scrapeCounts').textContent = '';
   document.getElementById('scrapeCurrentTitle').textContent = '';
+  document.getElementById('scrapeViewCompany').classList.add('d-none');
+
+  // Pre-populate log with all selected jobs
+  const log = document.getElementById('scrapeLog');
+  const pad = String(jobs.length).length;
+  log.innerHTML = '';
+  jobs.forEach((job, i) => {
+    const line = document.createElement('div');
+    line.id          = `log-line-${i + 1}`;
+    line.className   = 'text-muted';
+    line.textContent = `[${String(i + 1).padStart(pad)}/${jobs.length}] ${job.title}`;
+    log.appendChild(line);
+  });
+  log.scrollTop = 0;
 
   _es = new EventSource('/add-jobs/scrape/stream');
   document.getElementById('cancelScrape').classList.remove('d-none');
@@ -306,22 +379,26 @@ async function startScrape() {
       document.getElementById('scrapeBar').style.width = '100%';
       document.getElementById('scrapeCounts').textContent = '';
       document.getElementById('scrapeCurrentTitle').textContent = '';
-      document.getElementById('scrapeProgressLabel').innerHTML =
-        `Done — ${d.total} job${d.total !== 1 ? 's' : ''} scraped.` +
-        (d.company ? ` <a href="/${d.company}" class="btn btn-sm btn-success ms-2">View company</a>` : '');
+      document.getElementById('scrapeProgressLabel').textContent =
+        `Done — ${d.total} job${d.total !== 1 ? 's' : ''} scraped.`;
+      if (d.company) {
+        const vc = document.getElementById('scrapeViewCompany');
+        vc.innerHTML = `<a href="/${d.company}" class="btn btn-sm btn-success">View company</a>`;
+        vc.classList.remove('d-none');
+      }
       return;
     }
-    const pct = d.total ? Math.round((d.current / d.total) * 100) : 0;
-    document.getElementById('scrapeBar').style.width          = pct + '%';
-    document.getElementById('scrapeProgressLabel').textContent = 'Scraping…';
-    document.getElementById('scrapeCounts').textContent       = `${d.current} / ${d.total}`;
-    document.getElementById('scrapeCurrentTitle').textContent  = d.title || d.url || '';
-    const log  = document.getElementById('scrapeLog');
-    const line = document.createElement('div');
-    line.className   = d.error ? 'text-danger' : 'text-muted';
-    line.textContent = `[${d.current}/${d.total}] ${d.title || d.url}${d.error ? ' — ' + d.error : ''}`;
-    log.appendChild(line);
-    log.scrollTop = log.scrollHeight;
+    const pct  = d.total ? Math.round((d.current / d.total) * 100) : 0;
+    const pad2 = String(d.total).length;
+    document.getElementById('scrapeBar').style.width    = pct + '%';
+    document.getElementById('scrapeCounts').textContent = `${d.current} / ${d.total}`;
+    document.getElementById('scrapeCurrentTitle').textContent = d.title || d.url || '';
+    const line = document.getElementById(`log-line-${d.current}`);
+    if (line) {
+      line.className   = d.error ? 'text-danger' : '';
+      line.textContent = `[${String(d.current).padStart(pad2)}/${d.total}] ${d.title || d.url}${d.error ? ' — ' + d.error : ''}`;
+      line.scrollIntoView({block: 'nearest'});
+    }
   };
   _es.onerror = () => finishScrape();
 }
