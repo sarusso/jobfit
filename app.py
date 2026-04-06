@@ -17,7 +17,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, Response, abort, redirect, render_template, request, send_file, session, stream_with_context, url_for
+from flask import Flask, Response, abort, flash, redirect, render_template, request, send_file, session, stream_with_context, url_for
 
 DATA_DIR        = Path(__file__).parent / "data"
 CVS_DIR         = DATA_DIR / "_cvs"
@@ -269,6 +269,9 @@ def _do_score(job: dict, client, mode: str = "normal", use_notes: bool = False) 
     )
     elapsed = (datetime.now() - t0).total_seconds()
     result = json.loads(response.choices[0].message.content)
+    result["cv_hash"] = _cv_hash()
+    if notes:
+        result["notes_used"] = notes
     log.debug("Scored '%s' → %s/10 in %.1fs", title, result.get("score"), elapsed)
     return result
 
@@ -367,7 +370,15 @@ def _get_job(company: str, role_id: str) -> dict:
     data = _load_json(path)
     data["_role_id"] = role_id
     data["_has_pdf"] = path.with_suffix(".pdf").exists()
-    data["_score"] = _load_score(company, role_id)
+    use_notes = _use_notes()
+    mode = _current_mode()
+    data["_score"] = _load_score(company, role_id, mode, use_notes)
+    delta = None
+    if use_notes and data["_score"]:
+        plain = _load_score(company, role_id, mode, use_notes=False)
+        if plain is not None:
+            delta = data["_score"]["score"] - plain["score"]
+    data["_score_delta"] = delta
     return data
 
 
@@ -479,16 +490,23 @@ def cv_upload():
     if not f or not f.filename.lower().endswith(".pdf"):
         abort(400, "Please upload a PDF file.")
     pdf_bytes = f.read()
-    h = hashlib.sha256(pdf_bytes).hexdigest()
+    h = hashlib.sha256(pdf_bytes + f.filename.encode()).hexdigest()
     CVS_DIR.mkdir(parents=True, exist_ok=True)
-    (CVS_DIR / f"{h}.pdf").write_bytes(pdf_bytes)
     idx = _cv_index()
-    if h not in idx.get("cvs", {}):
-        name = Path(f.filename).stem.replace("_", " ").replace("-", " ").strip() or "CV"
-        idx.setdefault("cvs", {})[h] = {"name": name, "uploaded": datetime.now().isoformat()}
+    if h in idx.get("cvs", {}):
+        flash("This CV has already been uploaded.", "warning")
+        return _modal_cv_redirect()
+    (CVS_DIR / f"{h}.pdf").write_bytes(pdf_bytes)
+    name = Path(f.filename).stem.replace("_", " ").replace("-", " ").strip() or "CV"
+    idx.setdefault("cvs", {})[h] = {"name": name, "uploaded": datetime.now().isoformat()}
     idx["selected"] = h
     _save_cv_index(idx)
-    return redirect(url_for("index") + "?modal=cv")
+    return _modal_cv_redirect()
+
+
+def _modal_cv_redirect():
+    ref = request.referrer or url_for("index")
+    return redirect(ref.split("?")[0] + "?modal=cv")
 
 
 @app.route("/cv/select/<cv_hash>", methods=["POST"])
@@ -497,7 +515,7 @@ def cv_select(cv_hash: str):
     if cv_hash in idx.get("cvs", {}) and (CVS_DIR / f"{cv_hash}.pdf").exists():
         idx["selected"] = cv_hash
         _save_cv_index(idx)
-    return redirect(url_for("index") + "?modal=cv")
+    return _modal_cv_redirect()
 
 
 @app.route("/cv/rename/<cv_hash>", methods=["POST"])
@@ -522,7 +540,7 @@ def cv_delete(cv_hash: str):
         if idx.get("selected") == cv_hash:
             idx["selected"] = next(iter(cvs), None)
         _save_cv_index(idx)
-    return redirect(url_for("index") + "?modal=cv")
+    return _modal_cv_redirect()
 
 
 @app.route("/cv")

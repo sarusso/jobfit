@@ -146,6 +146,11 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ 'warning' if category == 'warning' else 'danger' }} small py-2 mb-3">{{ message }}</div>
+            {% endfor %}
+          {% endwith %}
           <p class="text-muted small mb-3">Each CV is stored independently. Scores are cached per CV — switching between them never overwrites each other's cache.</p>
 
           {% if all_cvs %}

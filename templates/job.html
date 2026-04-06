@@ -130,14 +130,26 @@
       <div class="card-body">
         <div class="section-title">CV Match</div>
         {% if job._score %}
-          <div class="d-flex align-items-center gap-2 mb-2">
+          <div class="d-flex align-items-center gap-2 mb-1">
             {{ score_badge(job._score, "fs-5 px-3 py-2") }}
-            <span class="text-muted small">out of 10</span>
-            {% if job._score.mode == 'brutal' %}
-            <span class="badge bg-danger" style="font-size:.65rem;">brutal</span>
-            {% endif %}
-            <a href="/help" class="text-decoration-none" title="How is this score calculated?"
-               style="display:inline-flex;align-items:center;justify-content:center;width:1.1rem;height:1.1rem;border-radius:50%;border:1.5px solid #adb5bd;color:#adb5bd;font-size:.65rem;font-weight:700;line-height:1;">?</a>
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <span class="text-muted small">out of 10</span>
+                {% if job._score.mode == 'brutal' %}
+                <span class="badge bg-danger" style="font-size:.65rem;">brutal</span>
+                {% endif %}
+                <a href="/help" class="text-decoration-none" title="How is this score calculated?"
+                   style="display:inline-flex;align-items:center;justify-content:center;width:1.1rem;height:1.1rem;border-radius:50%;border:1.5px solid #adb5bd;color:#adb5bd;font-size:.65rem;font-weight:700;line-height:1;">?</a>
+              </div>
+              {% if job._score.cv_hash or job._score_delta is not none %}
+              <div class="small text-muted">
+                {% if job._score.cv_hash %}with <a href="/cv/{{ job._score.cv_hash }}" target="_blank" class="text-muted text-decoration-underline">this CV</a>{% endif %}
+                {% if job._score_delta is not none %}
+                (<span class="fw-semibold {{ 'text-success' if job._score_delta > 0 else ('text-danger' if job._score_delta < 0 else 'text-muted') }}">{{ '+' if job._score_delta >= 0 else '' }}{{ job._score_delta }}</span> with <a href="#" class="text-muted text-decoration-underline" data-bs-toggle="modal" data-bs-target="#notesUsedModal">notes</a>)
+                {% endif %}
+              </div>
+              {% endif %}
+            </div>
           </div>
           <p class="small mb-3">{{ job._score.reasoning }}</p>
           {% if job._score.strengths %}
@@ -172,6 +184,27 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<div class="modal fade" id="notesUsedModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#f8f9fa;border-radius:.375rem .375rem 0 0">
+        <h5 class="modal-title">&#128221; Notes used for this score</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        {% if job._score and job._score.notes_used %}
+        <pre class="mb-0 small" style="white-space:pre-wrap;word-break:break-word">{{ job._score.notes_used }}</pre>
+        {% else %}
+        <p class="text-muted mb-0">Notes used for this scoring are not available.</p>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
