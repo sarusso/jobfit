@@ -118,6 +118,7 @@ def analyse_job(text: str, url: str, client) -> dict:
         response_format={"type": "json_object"},
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
+        seed=42,
     )
     return json.loads(response.choices[0].message.content)
 

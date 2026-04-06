@@ -376,8 +376,12 @@
                           <input type="number" id="scrapeLimit" class="form-control form-control-sm" placeholder="all" min="1">
                         </div>
                         <div style="max-width:8rem">
-                          <label class="form-label fw-semibold small">Timeout (s)</label>
-                          <input type="number" id="scrapeTimeout" class="form-control form-control-sm" placeholder="90" min="5" value="90">
+                          <label class="form-label fw-semibold small">Page timeout (s)</label>
+                          <input type="number" id="scrapeTimeout" class="form-control form-control-sm" placeholder="30" min="5" value="30">
+                        </div>
+                        <div style="max-width:8rem">
+                          <label class="form-label fw-semibold small">OpenAI timeout (s)</label>
+                          <input type="number" id="scrapeOpenaiTimeout" class="form-control form-control-sm" placeholder="120" min="10" value="120">
                         </div>
                       </div>
                       <div id="fieldHtmlSource" class="d-none">
@@ -611,8 +615,9 @@
       const company = board === 'lever'
         ? document.getElementById('scrapeCompany').value.trim()
         : document.getElementById('scrapeCompanyName').value.trim();
-      const limit   = parseInt(document.getElementById('scrapeLimit').value) || null;
-      const timeout = parseInt(document.getElementById('scrapeTimeout').value) || 90;
+      const limit         = parseInt(document.getElementById('scrapeLimit').value) || null;
+      const timeout       = parseInt(document.getElementById('scrapeTimeout').value) || 30;
+      const openai_timeout = parseInt(document.getElementById('scrapeOpenaiTimeout').value) || 120;
       const jobs    = [...document.querySelectorAll('.job-check:checked')].map(cb => ({
         url: cb.value, title: cb.dataset.title, company: cb.dataset.company || '',
       }));
@@ -620,7 +625,7 @@
       await fetch('/add-jobs/scrape/confirm', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({board, company, base_url: _baseUrl, jobs, limit, timeout}),
+        body: JSON.stringify({board, company, base_url: _baseUrl, jobs, limit, timeout, openai_timeout}),
       });
 
       document.getElementById('scrapeStep2').classList.add('d-none');

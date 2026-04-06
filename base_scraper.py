@@ -159,6 +159,8 @@ class BaseScraper(ABC):
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
+            seed=42,
+            timeout=getattr(self, "_openai_timeout", 120),
         )
         return json.loads(response.choices[0].message.content)
 
@@ -186,11 +188,12 @@ class BaseScraper(ABC):
     # Web / programmatic interface                                         #
     # ------------------------------------------------------------------ #
 
-    def setup(self, data_dir: Path, openai_client=None, timeout: int = 90) -> "BaseScraper":
+    def setup(self, data_dir: Path, openai_client=None, timeout: int = 30, openai_timeout: int = 120) -> "BaseScraper":
         """Configure the scraper for use as a module (instead of via CLI)."""
         self._data_dir = data_dir
         self._openai_client = openai_client
         self._timeout = timeout
+        self._openai_timeout = openai_timeout
         return self
 
     def scrape_iter(self, jobs: list[dict], company: Optional[str]):
@@ -274,8 +277,14 @@ class BaseScraper(ABC):
         parser.add_argument(
             "--timeout",
             type=int,
-            default=90,
-            help="Page load timeout in seconds (default: 90)",
+            default=30,
+            help="Page load timeout in seconds (default: 30)",
+        )
+        parser.add_argument(
+            "--openai-timeout",
+            type=int,
+            default=120,
+            help="OpenAI request timeout in seconds (default: 120)",
         )
         return parser
 
@@ -288,6 +297,7 @@ class BaseScraper(ABC):
 
         self._data_dir = Path(args.data_dir)
         self._timeout = args.timeout
+        self._openai_timeout = args.openai_timeout
         self._openai_client = None
 
         api_key = _load_config().get("OPENAI_KEY")

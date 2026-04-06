@@ -264,6 +264,7 @@ def _do_score(job: dict, client, mode: str = "normal", use_notes: bool = False) 
             ],
         }],
         temperature=0,
+        seed=42,
         timeout=SCORE_TIMEOUT,
     )
     elapsed = (datetime.now() - t0).total_seconds()
@@ -320,6 +321,7 @@ def _analyse_jd(text: str, client, url: str = "") -> dict:
         response_format={"type": "json_object"},
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
+        seed=42,
         timeout=SCORE_TIMEOUT,
     )
     return json.loads(response.choices[0].message.content)
@@ -688,10 +690,11 @@ def scrape_confirm():
     if limit:
         jobs = jobs[:int(limit)]
     _scrape_sessions[scrape_id] = {
-        "board":   data.get("board", "lever"),
-        "company": data.get("company", ""),
-        "jobs":    jobs,
-        "timeout": int(data.get("timeout") or 90),
+        "board":          data.get("board", "lever"),
+        "company":        data.get("company", ""),
+        "jobs":           jobs,
+        "timeout":        int(data.get("timeout") or 30),
+        "openai_timeout": int(data.get("openai_timeout") or 120),
     }
     session["_scrape_id"] = scrape_id
     return json.dumps({"ok": True})
@@ -704,11 +707,12 @@ def scrape_stream():
     if not params:
         abort(400, "No scrape session.")
 
-    board        = params.get("board", "lever")
-    company_raw  = params.get("company", "").strip()
-    jobs         = params.get("jobs", [])
-    timeout      = params.get("timeout", 90)
-    client       = _openai_client()
+    board          = params.get("board", "lever")
+    company_raw    = params.get("company", "").strip()
+    jobs           = params.get("jobs", [])
+    timeout        = params.get("timeout", 30)
+    openai_timeout = params.get("openai_timeout", 120)
+    client         = _openai_client()
 
     def _slugify(name: str) -> str:
         import unicodedata
@@ -727,10 +731,10 @@ def scrape_stream():
             return
         if board == "lever":
             from lever_scraper import LeverScraper
-            scraper = LeverScraper().setup(DATA_DIR, client, timeout=timeout)
+            scraper = LeverScraper().setup(DATA_DIR, client, timeout=timeout, openai_timeout=openai_timeout)
         else:
             from generic_scraper import GenericScraper
-            scraper = GenericScraper().setup(DATA_DIR, client, timeout=timeout)
+            scraper = GenericScraper().setup(DATA_DIR, client, timeout=timeout, openai_timeout=openai_timeout)
         last_company = fixed_company
         for event in scraper.scrape_iter(jobs, fixed_company):
             event["total"] = total

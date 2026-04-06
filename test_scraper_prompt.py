@@ -109,6 +109,8 @@ def main():
                         help="Save the fetched/cleaned HTML to a file for later reuse")
     parser.add_argument("--openai-timeout", type=int, default=120, metavar="SEC",
                         help="OpenAI request timeout in seconds (default: 120)")
+    parser.add_argument("--stream", action="store_true",
+                        help="Stream the response so you can see tokens arriving in real time")
     args = parser.parse_args()
 
     config = _load_config()
@@ -138,25 +140,48 @@ def main():
 
     # ── OpenAI call ──
     client = OpenAI(api_key=api_key)
-    print(f"[openai] Sending to gpt-4o-mini (timeout={args.openai_timeout}s)…", flush=True)
+    print(f"[openai] Sending to gpt-4o-mini (timeout={args.openai_timeout}s, stream={args.stream})…", flush=True)
     t0 = time.time()
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            response_format={"type": "json_object"},
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            timeout=args.openai_timeout,
-        )
+        if args.stream:
+            content_parts = []
+            with client.chat.completions.create(
+                model="gpt-4o-mini",
+                response_format={"type": "json_object"},
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                seed=42,
+                timeout=args.openai_timeout,
+                stream=True,
+            ) as stream:
+                first = True
+                for chunk in stream:
+                    delta = chunk.choices[0].delta.content or ""
+                    if delta:
+                        if first:
+                            print(f"[openai] First token at {time.time() - t0:.1f}s — streaming:", flush=True)
+                            first = False
+                        print(delta, end="", flush=True)
+                        content_parts.append(delta)
+                print()  # newline after stream ends
+            content = "".join(content_parts)
+            print(f"[openai] Done in {time.time() - t0:.1f}s — {len(content):,} chars received", flush=True)
+        else:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                response_format={"type": "json_object"},
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                seed=42,
+                timeout=args.openai_timeout,
+            )
+            content = response.choices[0].message.content
+            usage = response.usage
+            print(f"[openai] Done in {time.time() - t0:.1f}s — "
+                  f"prompt_tokens={usage.prompt_tokens}, completion_tokens={usage.completion_tokens}", flush=True)
     except Exception as e:
-        print(f"\n[ERROR] OpenAI call failed after {time.time() - t0:.1f}s: {e}", file=sys.stderr)
+        print(f"\n[ERROR] OpenAI call failed after {time.time() - t0:.1f}s: {type(e).__name__}: {e}", file=sys.stderr)
         sys.exit(1)
-
-    elapsed = time.time() - t0
-    content = response.choices[0].message.content
-    usage = response.usage
-    print(f"[openai] Done in {elapsed:.1f}s — "
-          f"prompt_tokens={usage.prompt_tokens}, completion_tokens={usage.completion_tokens}", flush=True)
 
     # ── Parse + print result ──
     try:

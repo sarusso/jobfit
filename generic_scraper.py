@@ -113,7 +113,7 @@ class GenericScraper(BaseScraper):
                 return raw
             return None
 
-        timeout_ms = getattr(self, "_timeout", 90) * 1000
+        timeout_ms = getattr(self, "_timeout", 30) * 1000
         all_jobs: list[dict] = []
         top_company = ""
         visited: set[str] = set()
@@ -130,7 +130,8 @@ class GenericScraper(BaseScraper):
                 response_format={"type": "json_object"},
                 messages=[{"role": "user", "content": _make_prompt(current_url, page_html)}],
                 temperature=0,
-                timeout=120,
+                seed=42,
+                timeout=getattr(self, "_openai_timeout", 120),
             )
             data = json.loads(response.choices[0].message.content)
             log.debug("fetch_jobs page=%s response:\n%s", current_url, json.dumps(data, indent=2, ensure_ascii=False))
