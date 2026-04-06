@@ -37,7 +37,7 @@
       <div class="d-flex gap-2 ms-3 flex-shrink-0 align-items-start">
         <form action="/score/{{ company }}/{{ job._role_id }}" method="post" class="m-0">
           <button class="btn btn-outline-primary" {{ "disabled" if not can_score }}
-                  title="{{ 'Upload a CV to enable scoring' if not can_score }}">
+                  title="{{ 'Requires OpenAI key' if not has_openai_key else ('Upload a CV to enable scoring' if not cv_uploaded) }}">
             {{ "Re-score vs CV" if job._score else "Score vs CV" }}
           </button>
         </form>

@@ -75,42 +75,34 @@ class GenericScraper(BaseScraper):
 
         html = html_src if html_src else _rendered_html(base_url, timeout_ms=getattr(self, "_timeout", 30) * 1000)
 
-        prompt = (
-            "You are analyzing the HTML of a page that may be a single company careers page "
-            "OR a listing page with job postings from multiple different companies "
-            "(e.g. a job board, a 'who's hiring' thread, an aggregator).\n\n"
-            f"Page URL: {base_url}\n\n"
-            "HTML (scripts, styles and non-essential attributes removed):\n"
-            f"{html}\n\n"
-            "Extract EVERY individual job posting linked anywhere on this page, across ALL companies.\n"
-            "Return ONLY valid JSON:\n"
-            "{\n"
-            '  "company": "Single company name if the page belongs to one company, otherwise empty string",\n'
-            '  "categories": ["list of unique department or job category names found across all jobs"],\n'
-            '  "jobs": [\n'
-            '    {"title": "Job Title", "url": "<href value>", "category": "Department or General", "company": "Company name for this specific job"}\n'
-            '  ]\n'
-            "}\n\n"
-            "Rules:\n"
-            "- Include ALL job postings found, not just those from the first company\n"
-            "- Only include <a href> links that point to individual job postings\n"
-            "- Use the href value exactly as it appears in the HTML\n"
-            "- Set company per job to the company that posted it\n"
-            "- If no department is labelled for a job, use 'General'\n"
-            "- Leave the top-level company field empty if multiple companies are present\n"
-            "- Return empty lists if no jobs are found"
-        )
-
-        response = self._openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            response_format={"type": "json_object"},
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0,
-            timeout=120,
-        )
-        data = json.loads(response.choices[0].message.content)
-        log.debug("fetch_jobs raw response:\n%s", json.dumps(data, indent=2, ensure_ascii=False))
-        top_company = data.get("company", "")
+        def _make_prompt(page_url, page_html):
+            return (
+                "You are analyzing the HTML of a page that may be a single company careers page "
+                "OR a listing page with job postings from multiple different companies "
+                "(e.g. a job board, a 'who's hiring' thread, an aggregator).\n\n"
+                f"Page URL: {page_url}\n\n"
+                "HTML (scripts, styles and non-essential attributes removed):\n"
+                f"{page_html}\n\n"
+                "Extract EVERY individual job posting linked anywhere on this page, across ALL companies.\n"
+                "Return ONLY valid JSON:\n"
+                "{\n"
+                '  "company": "Single company name if the page belongs to one company, otherwise empty string",\n'
+                '  "categories": ["list of unique department or job category names found across all jobs"],\n'
+                '  "jobs": [\n'
+                '    {"title": "Job Title", "url": "<href value>", "category": "Department or General", "company": "Company name for this specific job"}\n'
+                '  ],\n'
+                '  "next_page": "URL of the next page of job listings if a pagination link exists, otherwise empty string"\n'
+                "}\n\n"
+                "Rules:\n"
+                "- Include ALL job postings found, not just those from the first company\n"
+                "- Only include <a href> links that point to individual job postings\n"
+                "- Use the href value exactly as it appears in the HTML\n"
+                "- Set company per job to the company that posted it\n"
+                "- If no department is labelled for a job, use 'General'\n"
+                "- Leave the top-level company field empty if multiple companies are present\n"
+                "- Set next_page only if there is a clearly labelled 'next page' or pagination link — otherwise leave empty\n"
+                "- Return empty lists if no jobs are found"
+            )
 
         def _valid_url(raw, base):
             if not raw:
@@ -119,17 +111,42 @@ class GenericScraper(BaseScraper):
                 return urljoin(base, raw)
             if raw.startswith("http://") or raw.startswith("https://"):
                 return raw
-            return None  # mailto:, ftp:, relative paths without leading slash, etc.
+            return None
 
-        self._jobs = [
-            {
-                **job,
-                "url": resolved,
-                "company": job.get("company") or top_company,
-            }
-            for job in data.get("jobs", [])
-            if (resolved := _valid_url(job.get("url", ""), base_url))
-        ]
+        timeout_ms = getattr(self, "_timeout", 90) * 1000
+        all_jobs: list[dict] = []
+        top_company = ""
+        visited: set[str] = set()
+        current_url = base_url
+        current_html = html_src  # pasted HTML only used for the first page
+
+        while current_url and current_url not in visited:
+            visited.add(current_url)
+            page_html = current_html if current_html else _rendered_html(current_url, timeout_ms=timeout_ms)
+            current_html = None  # subsequent pages always fetched
+
+            response = self._openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                response_format={"type": "json_object"},
+                messages=[{"role": "user", "content": _make_prompt(current_url, page_html)}],
+                temperature=0,
+                timeout=120,
+            )
+            data = json.loads(response.choices[0].message.content)
+            log.debug("fetch_jobs page=%s response:\n%s", current_url, json.dumps(data, indent=2, ensure_ascii=False))
+
+            if not top_company:
+                top_company = data.get("company", "")
+
+            for job in data.get("jobs", []):
+                resolved = _valid_url(job.get("url", ""), current_url)
+                if resolved:
+                    all_jobs.append({**job, "url": resolved, "company": job.get("company") or top_company})
+
+            next_page = _valid_url(data.get("next_page", ""), current_url)
+            current_url = next_page if next_page and next_page != current_url else None
+
+        self._jobs = all_jobs
         self._base_url_cache = base_url
         return self._jobs
 

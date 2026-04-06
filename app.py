@@ -383,6 +383,7 @@ def inject_globals():
     return {
         "cv_uploaded": cv_path is not None,
         "all_cvs": _all_cvs(),
+        "has_openai_key": bool(_load_config().get("OPENAI_KEY")),
         "can_score": cv_path is not None and bool(_load_config().get("OPENAI_KEY")),
         "scoring_mode": _current_mode(),
         "use_notes": _use_notes(),

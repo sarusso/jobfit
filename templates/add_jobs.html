@@ -14,7 +14,7 @@
 
 <h2 class="mb-3">Add Jobs</h2>
 
-{% if not can_score %}
+{% if not has_openai_key %}
 <div class="alert alert-warning small mb-3">
   <strong>No OpenAI key configured.</strong>
   URL and text analysis require <code>OPENAI_KEY</code> in <code>config.env</code>.
@@ -54,10 +54,10 @@
           <label class="form-label fw-semibold">Job posting URL</label>
           <input type="url" name="jd_url" class="form-control" placeholder="https://…">
         </div>
-        <button type="submit" class="btn btn-primary" id="urlSubmit" {{ "disabled" if not can_score }}>
+        <button type="submit" class="btn btn-primary" id="urlSubmit" {{ "disabled" if not has_openai_key }}>
           Add job
         </button>
-        {% if not can_score %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+        {% if not has_openai_key %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
       </form>
     </div>
 
@@ -73,10 +73,10 @@
           <label class="form-label fw-semibold">Upload file <span class="fw-normal text-muted small">(PDF or TXT)</span></label>
           <input type="file" name="jd_pdf" class="form-control" accept=".pdf,.txt">
         </div>
-        <button type="submit" class="btn btn-primary" id="fileSubmit" {{ "disabled" if not can_score }}>
+        <button type="submit" class="btn btn-primary" id="fileSubmit" {{ "disabled" if not has_openai_key }}>
           Add job
         </button>
-        {% if not can_score %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+        {% if not has_openai_key %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
       </form>
     </div>
 
@@ -93,10 +93,10 @@
           <textarea name="text" class="form-control font-monospace" rows="10"
                     placeholder="Paste the full job description here…" required></textarea>
         </div>
-        <button type="submit" class="btn btn-primary" id="textSubmit" {{ "disabled" if not can_score }}>
+        <button type="submit" class="btn btn-primary" id="textSubmit" {{ "disabled" if not has_openai_key }}>
           Add job
         </button>
-        {% if not can_score %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+        {% if not has_openai_key %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
       </form>
     </div>
 
@@ -128,7 +128,7 @@
                 <input type="url" id="scrapeUrl" class="form-control" placeholder="https://company.com/careers">
               </div>
               <div class="col-sm-4">
-                <label class="form-label fw-semibold">Company name <span class="fw-normal text-muted small">optional</span></label>
+                <label class="form-label fw-semibold">Company name</label>
                 <input type="text" id="scrapeCompanyName" class="form-control" placeholder="auto-detect">
               </div>
             </div>
