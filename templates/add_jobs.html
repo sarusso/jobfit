@@ -138,9 +138,15 @@
         <details class="mb-3" id="advancedDetails">
           <summary class="text-muted small" style="cursor:pointer">Advanced</summary>
           <div class="mt-2 d-flex flex-column gap-3">
-            <div style="max-width:12rem">
-              <label class="form-label fw-semibold small">Limit</label>
-              <input type="number" id="scrapeLimit" class="form-control form-control-sm" placeholder="all" min="1">
+            <div class="d-flex gap-3">
+              <div style="max-width:8rem">
+                <label class="form-label fw-semibold small">Limit</label>
+                <input type="number" id="scrapeLimit" class="form-control form-control-sm" placeholder="all" min="1">
+              </div>
+              <div style="max-width:8rem">
+                <label class="form-label fw-semibold small">Timeout (s)</label>
+                <input type="number" id="scrapeTimeout" class="form-control form-control-sm" placeholder="90" min="5" value="90">
+              </div>
             </div>
             <div id="fieldHtmlSource" class="d-none">
               <label class="form-label fw-semibold small">Paste HTML source</label>
@@ -368,6 +374,7 @@ async function startScrape() {
     ? document.getElementById('scrapeCompany').value.trim()
     : document.getElementById('scrapeCompanyName').value.trim();
   const limit   = parseInt(document.getElementById('scrapeLimit').value) || null;
+  const timeout = parseInt(document.getElementById('scrapeTimeout').value) || 90;
   const jobs    = [...document.querySelectorAll('.job-check:checked')].map(cb => ({
     url: cb.value, title: cb.dataset.title, company: cb.dataset.company || '',
   }));
@@ -375,7 +382,7 @@ async function startScrape() {
   await fetch('/add-jobs/scrape/confirm', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({board, company, base_url: _baseUrl, jobs, limit}),
+    body: JSON.stringify({board, company, base_url: _baseUrl, jobs, limit, timeout}),
   });
 
   document.getElementById('scrapeStep2').classList.add('d-none');

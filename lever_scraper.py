@@ -62,7 +62,7 @@ class LeverScraper(BaseScraper):
     # ------------------------------------------------------------------ #
 
     def _fetch_soup(self, url: str) -> BeautifulSoup:
-        resp = requests.get(url, timeout=30)
+        resp = requests.get(url, timeout=getattr(self, "_timeout", 30))
         resp.raise_for_status()
         return BeautifulSoup(resp.text, "html.parser")
 

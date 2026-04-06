@@ -120,7 +120,8 @@ class BaseScraper(ABC):
 
     def render_to_pdf(self, url: str, output_path: Path, page) -> str:
         """Navigate to url, save full page as PDF, return page plain text."""
-        page.goto(url, wait_until="networkidle")
+        timeout_ms = getattr(self, "_timeout", 30) * 1000
+        page.goto(url, wait_until="networkidle", timeout=timeout_ms)
         page.pdf(path=str(output_path), format="A4", print_background=True)
         return page.inner_text("body")
 
@@ -185,10 +186,11 @@ class BaseScraper(ABC):
     # Web / programmatic interface                                         #
     # ------------------------------------------------------------------ #
 
-    def setup(self, data_dir: Path, openai_client=None) -> "BaseScraper":
+    def setup(self, data_dir: Path, openai_client=None, timeout: int = 90) -> "BaseScraper":
         """Configure the scraper for use as a module (instead of via CLI)."""
         self._data_dir = data_dir
         self._openai_client = openai_client
+        self._timeout = timeout
         return self
 
     def scrape_iter(self, jobs: list[dict], company: Optional[str]):
@@ -269,6 +271,12 @@ class BaseScraper(ABC):
             default="data",
             help="Root folder for the job database (default: data/)",
         )
+        parser.add_argument(
+            "--timeout",
+            type=int,
+            default=90,
+            help="Page load timeout in seconds (default: 90)",
+        )
         return parser
 
     # ------------------------------------------------------------------ #
@@ -279,6 +287,7 @@ class BaseScraper(ABC):
         args = self.build_arg_parser().parse_args(argv)
 
         self._data_dir = Path(args.data_dir)
+        self._timeout = args.timeout
         self._openai_client = None
 
         api_key = _load_config().get("OPENAI_KEY")

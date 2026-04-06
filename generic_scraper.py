@@ -24,12 +24,12 @@ from base_scraper import BaseScraper
 _MAX_HTML_CHARS = 80_000
 
 
-def _rendered_html(url: str) -> str:
+def _rendered_html(url: str, timeout_ms: int = 30_000) -> str:
     """Fetch fully-rendered DOM via Playwright and return cleaned HTML."""
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
-        page.goto(url, wait_until="networkidle", timeout=30_000)
+        page.goto(url, wait_until="networkidle", timeout=timeout_ms)
         html = page.content()
         browser.close()
 
@@ -73,7 +73,7 @@ class GenericScraper(BaseScraper):
         if hasattr(self, "_jobs") and getattr(self, "_base_url_cache", None) == base_url:
             return self._jobs
 
-        html = html_src if html_src else _rendered_html(base_url)
+        html = html_src if html_src else _rendered_html(base_url, timeout_ms=getattr(self, "_timeout", 30) * 1000)
 
         prompt = (
             "You are analyzing the HTML of a page that may be a single company careers page "

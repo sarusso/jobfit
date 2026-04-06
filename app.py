@@ -689,6 +689,7 @@ def scrape_confirm():
         "board":   data.get("board", "lever"),
         "company": data.get("company", ""),
         "jobs":    jobs,
+        "timeout": int(data.get("timeout") or 90),
     }
     session["_scrape_id"] = scrape_id
     return json.dumps({"ok": True})
@@ -704,6 +705,7 @@ def scrape_stream():
     board        = params.get("board", "lever")
     company_raw  = params.get("company", "").strip()
     jobs         = params.get("jobs", [])
+    timeout      = params.get("timeout", 90)
     client       = _openai_client()
 
     def _slugify(name: str) -> str:
@@ -723,10 +725,10 @@ def scrape_stream():
             return
         if board == "lever":
             from lever_scraper import LeverScraper
-            scraper = LeverScraper().setup(DATA_DIR, client)
+            scraper = LeverScraper().setup(DATA_DIR, client, timeout=timeout)
         else:
             from generic_scraper import GenericScraper
-            scraper = GenericScraper().setup(DATA_DIR, client)
+            scraper = GenericScraper().setup(DATA_DIR, client, timeout=timeout)
         last_company = fixed_company
         for event in scraper.scrape_iter(jobs, fixed_company):
             event["total"] = total
