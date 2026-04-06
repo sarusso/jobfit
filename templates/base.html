@@ -171,10 +171,10 @@
               {# Actions #}
               <div class="d-flex align-items-center gap-1 flex-shrink-0">
                 {% if cv.selected %}
-                  <span class="badge bg-success">Active</span>
+                  <span class="badge bg-success d-inline-flex align-items-center" style="height:2rem;padding:0 .6rem;font-size:.75rem">Active</span>
                 {% else %}
                   <form action="/cv/select/{{ cv.hash }}" method="post" class="m-0">
-                    <button class="btn btn-sm btn-outline-success">Use</button>
+                    <button class="btn btn-sm btn-outline-success">Make active</button>
                   </form>
                 {% endif %}
                 <a href="/cv/{{ cv.hash }}" target="_blank" class="btn btn-sm btn-outline-secondary">View</a>
@@ -693,9 +693,24 @@
     }
   </script>
   <script>
-    // Auto-open Add Jobs modal from ?modal=add-jobs query param
-    if (new URLSearchParams(location.search).get('modal') === 'add-jobs') {
-      bootstrap.Modal.getOrCreateInstance(document.getElementById('addJobsModal')).show();
+    // Reset notes textarea on modal close without saving
+    document.getElementById('notesModal').addEventListener('hidden.bs.modal', () => {
+      const ta = document.querySelector('#notesModal textarea');
+      ta.value = ta.defaultValue;
+    });
+
+    // Auto-open modals from ?modal=<name> query param (no animation)
+    function _openModalInstant(el) {
+      el.classList.remove('fade');
+      bootstrap.Modal.getOrCreateInstance(el).show();
+      el.addEventListener('shown.bs.modal', () => el.classList.add('fade'), {once: true});
+    }
+    const _modalParam = new URLSearchParams(location.search).get('modal');
+    if (_modalParam === 'add-jobs') {
+      _openModalInstant(document.getElementById('addJobsModal'));
+      history.replaceState(null, '', location.pathname);
+    } else if (_modalParam === 'cv') {
+      _openModalInstant(document.getElementById('cvModal'));
       history.replaceState(null, '', location.pathname);
     }
 

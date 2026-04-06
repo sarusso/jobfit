@@ -124,9 +124,10 @@ def _all_cvs() -> list[dict]:
             "hash": h,
             "name": meta.get("name", "CV"),
             "uploaded": uploaded_str,
+            "uploaded_ts": meta.get("uploaded", ""),
             "selected": h == idx.get("selected"),
         })
-    result.sort(key=lambda x: (not x["selected"], x["name"]))
+    result.sort(key=lambda x: x["uploaded_ts"], reverse=True)
     return result
 
 
@@ -485,7 +486,7 @@ def cv_upload():
         idx.setdefault("cvs", {})[h] = {"name": name, "uploaded": datetime.now().isoformat()}
     idx["selected"] = h
     _save_cv_index(idx)
-    return redirect(request.referrer or url_for("index"))
+    return redirect(url_for("index") + "?modal=cv")
 
 
 @app.route("/cv/select/<cv_hash>", methods=["POST"])
@@ -494,7 +495,7 @@ def cv_select(cv_hash: str):
     if cv_hash in idx.get("cvs", {}) and (CVS_DIR / f"{cv_hash}.pdf").exists():
         idx["selected"] = cv_hash
         _save_cv_index(idx)
-    return redirect(request.referrer or url_for("index"))
+    return redirect(url_for("index") + "?modal=cv")
 
 
 @app.route("/cv/rename/<cv_hash>", methods=["POST"])
@@ -519,7 +520,7 @@ def cv_delete(cv_hash: str):
         if idx.get("selected") == cv_hash:
             idx["selected"] = next(iter(cvs), None)
         _save_cv_index(idx)
-    return redirect(request.referrer or url_for("index"))
+    return redirect(url_for("index") + "?modal=cv")
 
 
 @app.route("/cv")
