@@ -578,7 +578,7 @@ def _save_job(company_raw: str, job_data: dict, pdf_bytes: bytes | None = None) 
 
 @app.route("/add-jobs")
 def add_jobs():
-    return render_template("add_jobs.html")
+    return redirect(url_for("index") + "?modal=add-jobs")
 
 
 @app.route("/add-jobs/url", methods=["POST"])
