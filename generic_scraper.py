@@ -76,24 +76,28 @@ class GenericScraper(BaseScraper):
         html = html_src if html_src else _rendered_html(base_url)
 
         prompt = (
-            "You are analyzing the rendered HTML of a company careers/jobs page.\n\n"
+            "You are analyzing the HTML of a page that may be a single company careers page "
+            "OR a listing page with job postings from multiple different companies "
+            "(e.g. a job board, a 'who's hiring' thread, an aggregator).\n\n"
             f"Page URL: {base_url}\n\n"
             "HTML (scripts, styles and non-essential attributes removed):\n"
             f"{html}\n\n"
-            "Extract every individual job posting linked on this page.\n"
+            "Extract EVERY individual job posting linked anywhere on this page, across ALL companies.\n"
             "Return ONLY valid JSON:\n"
             "{\n"
-            '  "company": "Company name",\n'
-            '  "categories": ["list of unique department or job category names"],\n'
+            '  "company": "Single company name if the page belongs to one company, otherwise empty string",\n'
+            '  "categories": ["list of unique department or job category names found across all jobs"],\n'
             '  "jobs": [\n'
-            '    {"title": "Job Title", "url": "<href value>", "category": "Department", "company": "Company name"}\n'
+            '    {"title": "Job Title", "url": "<href value>", "category": "Department or General", "company": "Company name for this specific job"}\n'
             '  ]\n'
             "}\n\n"
             "Rules:\n"
+            "- Include ALL job postings found, not just those from the first company\n"
             "- Only include <a href> links that point to individual job postings\n"
             "- Use the href value exactly as it appears in the HTML\n"
-            "- If no departments are labelled, use 'General' for every job\n"
-            "- The company field in each job should match the top-level company unless the page lists jobs for multiple companies\n"
+            "- Set company per job to the company that posted it\n"
+            "- If no department is labelled for a job, use 'General'\n"
+            "- Leave the top-level company field empty if multiple companies are present\n"
             "- Return empty lists if no jobs are found"
         )
 
@@ -108,14 +112,23 @@ class GenericScraper(BaseScraper):
         log.debug("fetch_jobs raw response:\n%s", json.dumps(data, indent=2, ensure_ascii=False))
         top_company = data.get("company", "")
 
+        def _valid_url(raw, base):
+            if not raw:
+                return None
+            if raw.startswith("/"):
+                return urljoin(base, raw)
+            if raw.startswith("http://") or raw.startswith("https://"):
+                return raw
+            return None  # mailto:, ftp:, relative paths without leading slash, etc.
+
         self._jobs = [
             {
                 **job,
-                "url": urljoin(base_url, job["url"]),
+                "url": resolved,
                 "company": job.get("company") or top_company,
             }
             for job in data.get("jobs", [])
-            if job.get("url")
+            if (resolved := _valid_url(job.get("url", ""), base_url))
         ]
         self._base_url_cache = base_url
         return self._jobs
