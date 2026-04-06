@@ -219,6 +219,7 @@ class BaseScraper(ABC):
             for i, job_stub in enumerate(jobs, 1):
                 url = job_stub.get("url", "")
                 event: dict = {"current": i, "url": url, "title": job_stub.get("title") or url}
+                yield {**event, "starting": True}
                 try:
                     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
                         pdf_tmp = Path(tmp.name)

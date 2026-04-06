@@ -672,10 +672,16 @@ def add_job_url():
         pdf_bytes, jd_text = _url_to_pdf_and_text(url)
 
     job_data = _analyse_jd(jd_text, client, url=url)
+    if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
+        flash("The analysis returned no job content. The URL or file may not contain a job posting.", "danger")
+        ref = request.referrer or url_for("index")
+        return redirect(ref.split("?")[0] + "?modal=add-jobs")
     # User-supplied name takes precedence; fall back to LLM-extracted name
     resolved = company_raw or job_data.get("company", "").strip()
     if not resolved:
-        abort(400, "Could not determine the company name. Please fill in the Company field.")
+        flash("Could not determine the company name. Please fill in the Company field.", "danger")
+        ref = request.referrer or url_for("index")
+        return redirect(ref.split("?")[0] + "?modal=add-jobs")
     job_data["company"] = resolved
     job_data["source"]  = "url" if url else "manual"
     company, role_id = _save_job(resolved, job_data, pdf_bytes)
@@ -695,9 +701,15 @@ def add_job_text():
         abort(400, "OPENAI_KEY not set in config.env.")
 
     job_data = _analyse_jd(text, client)
+    if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
+        flash("The analysis returned no job content. The pasted text may not contain a job posting.", "danger")
+        ref = request.referrer or url_for("index")
+        return redirect(ref.split("?")[0] + "?modal=add-jobs")
     resolved = company_raw or job_data.get("company", "").strip()
     if not resolved:
-        abort(400, "Could not determine the company name. Please fill in the Company field.")
+        flash("Could not determine the company name. Please fill in the Company field.", "danger")
+        ref = request.referrer or url_for("index")
+        return redirect(ref.split("?")[0] + "?modal=add-jobs")
     job_data["company"] = resolved
     job_data["source"]  = "text"
     company, role_id = _save_job(resolved, job_data)

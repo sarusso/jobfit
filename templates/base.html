@@ -277,6 +277,12 @@
         </div>
         <div class="modal-body">
 
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }} small py-2 mb-3">{{ message }}</div>
+            {% endfor %}
+          {% endwith %}
+
           <div class="tab-content">
 
               {# ── Tab 1: URL ── #}
@@ -663,7 +669,9 @@
       }
 
       _es.onmessage = e => {
-        const d = JSON.parse(e.data);
+        const d    = JSON.parse(e.data);
+        const pad2 = String(d.total).length;
+
         if (d.done) {
           finishScrape();
           document.getElementById('scrapeBar').style.width = '100%';
@@ -678,14 +686,28 @@
           }
           return;
         }
-        const pct  = d.total ? Math.round((d.current / d.total) * 100) : 0;
-        const pad2 = String(d.total).length;
+
+        if (d.starting) {
+          const pct = d.total ? Math.round(((d.current - 0.5) / d.total) * 100) : 0;
+          document.getElementById('scrapeBar').style.width    = pct + '%';
+          document.getElementById('scrapeCounts').textContent = `${d.current} / ${d.total}`;
+          document.getElementById('scrapeCurrentTitle').textContent = d.title || d.url || '';
+          const line = document.getElementById(`log-line-${d.current}`);
+          if (line) {
+            line.className   = 'text-primary';
+            line.textContent = `[${String(d.current).padStart(pad2)}/${d.total}] ⟳ ${d.title || d.url}`;
+            line.scrollIntoView({block: 'nearest'});
+          }
+          return;
+        }
+
+        const pct = d.total ? Math.round((d.current / d.total) * 100) : 0;
         document.getElementById('scrapeBar').style.width    = pct + '%';
         document.getElementById('scrapeCounts').textContent = `${d.current} / ${d.total}`;
         document.getElementById('scrapeCurrentTitle').textContent = d.title || d.url || '';
         const line = document.getElementById(`log-line-${d.current}`);
         if (line) {
-          line.className   = d.error ? 'text-danger' : '';
+          line.className   = d.error ? 'text-danger' : 'text-success';
           line.textContent = `[${String(d.current).padStart(pad2)}/${d.total}] ${d.title || d.url}${d.error ? ' — ' + d.error : ''}`;
           line.scrollIntoView({block: 'nearest'});
         }
