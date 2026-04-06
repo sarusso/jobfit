@@ -160,6 +160,43 @@ def _load_score(company: str, role_id: str, mode: str | None = None, use_notes: 
     return data
 
 
+def _all_cv_scores(company: str, role_id: str) -> list[dict]:
+    """Return all cached scores for a job across all CVs and modes."""
+    scores_dir = DATA_DIR / company / "_scores"
+    if not scores_dir.exists():
+        return []
+    # Build h8 → {hash, name} map from CV index
+    idx = _cv_index()
+    h8_to_cv = {h[:8]: {"hash": h, "name": meta.get("name", "CV")}
+                for h, meta in idx.get("cvs", {}).items()}
+    results = []
+    for path in sorted(scores_dir.glob(f"{role_id}_*.json")):
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        # Derive h8 from stored cv_hash or filename
+        cv_hash_full = data.get("cv_hash")
+        h8 = cv_hash_full[:8] if cv_hash_full else None
+        if not h8:
+            # Parse filename: <role_id>_<mode>[_notes]_<h8>.json
+            stem = path.stem[len(role_id) + 1:]  # strip "<role_id>_"
+            h8 = stem.split("_")[-1]
+        cv_info = h8_to_cv.get(h8, {"hash": h8, "name": "Unknown CV"})
+        use_notes = "_notes_" in path.stem
+        results.append({
+            "score": data.get("score"),
+            "mode": data.get("mode", "normal"),
+            "use_notes": use_notes,
+            "cv_hash": cv_info["hash"],
+            "cv_name": cv_info["name"],
+            "reasoning": data.get("reasoning", ""),
+        })
+    results.sort(key=lambda x: (x["cv_name"], x["mode"], x["use_notes"]))
+    return results
+
+
 def _save_score(company: str, role_id: str, score_data: dict, mode: str, use_notes: bool = False) -> None:
     path = _score_path(company, role_id, mode, use_notes)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -270,6 +307,7 @@ def _do_score(job: dict, client, mode: str = "normal", use_notes: bool = False) 
     elapsed = (datetime.now() - t0).total_seconds()
     result = json.loads(response.choices[0].message.content)
     result["cv_hash"] = _cv_hash()
+    result["scored_at"] = datetime.now().isoformat()
     if notes:
         result["notes_used"] = notes
     log.debug("Scored '%s' → %s/10 in %.1fs", title, result.get("score"), elapsed)
@@ -379,6 +417,7 @@ def _get_job(company: str, role_id: str) -> dict:
         if plain is not None:
             delta = data["_score"]["score"] - plain["score"]
     data["_score_delta"] = delta
+    data["_all_scores"] = _all_cv_scores(company, role_id)
     return data
 
 

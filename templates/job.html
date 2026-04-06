@@ -181,6 +181,23 @@
             {% endif %}
           </p>
         {% endif %}
+
+        {% if job._all_scores %}
+        <div class="border-top mt-3 pt-3">
+          <div class="section-title mb-2">All scores</div>
+          <div class="d-flex flex-column gap-1">
+            {% for s in job._all_scores %}
+            {% set cls = "score-high" if s.score >= 9 else ("score-mid" if s.score >= 5 else "score-low") %}
+            <div class="d-flex align-items-center gap-2 small">
+              <span class="badge {{ cls }}">{{ s.score }}/10</span>
+              <a href="/cv/{{ s.cv_hash }}" target="_blank" class="text-truncate text-decoration-none text-dark" style="max-width:9rem" title="{{ s.cv_name }}">{{ s.cv_name }}</a>
+              {% if s.mode == 'brutal' %}<span class="badge bg-danger" style="font-size:.6rem">brutal</span>{% endif %}
+              {% if s.use_notes %}<span class="text-muted" style="font-size:.7rem">w/notes</span>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
       </div>
     </div>
 

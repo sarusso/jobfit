@@ -72,5 +72,28 @@ After changing either the CV or the notes, existing scores are **not** automatic
 invalidated (only CV changes invalidate scores via the `cv_hash` check). If you update
 your notes, manually re-score roles that matter — the notes are not hashed.
 
-A future improvement would be to hash notes alongside the CV and invalidate stale scores
-when either changes.
+---
+
+## Known limitations of score provenance
+
+Each score cache file records `cv_hash`, `scored_at`, and (when applicable) `notes_used`.
+The following are **not** currently tracked:
+
+**1. Model version / infrastructure fingerprint**
+OpenAI returns a `system_fingerprint` in every response identifying the exact model
+snapshot and infrastructure. We currently discard it. If OpenAI silently updates the
+model, two scores computed at different times with identical inputs may differ, with no
+way to tell why. Storing `system_fingerprint` alongside each score would make this
+detectable.
+
+**2. Job description snapshot**
+Scores are computed against the job JSON at scoring time, but the JSON can be overwritten
+by a re-scrape or manual edit. If the job description changes after scoring, the cached
+score is silently stale. A hash of the job fields used in the prompt would allow
+detecting this.
+
+**3. Notes hash**
+`notes_used` stores the full notes text, but there is no hash of it. The current design
+does not auto-invalidate scores when notes change (by intent — re-score manually). A
+`notes_hash` field would let the UI warn "notes have changed since this score was
+computed" without forcing a re-score.
