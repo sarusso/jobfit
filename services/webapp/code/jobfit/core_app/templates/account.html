@@ -1,0 +1,124 @@
+{% load static %}
+{% include "header.html" %}
+{% include "navigation.html" %}
+                <br/>
+                <div class="row">
+                    <div class="col-xl-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h1>Account</h1>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {% if data.success %}
+                <br/>
+                <div class="row">
+                    <div class="col-xl-12">
+                        <div class='centerbox-success'>{{ data.success }}</div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <br/>
+                <div class="row">
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h3>Basic info</h3>
+                                <form action="/account/" method="POST">
+                                {% csrf_token %}
+                                <table class="dashboard">
+
+                                <tr>
+                                <td><b>Account ID</b></td>
+                                <td>{{data.user.username}}</td>
+                                </tr>
+
+                                <tr>
+                                <td><b>Email</b></td>
+                                <td>
+                                {% if data.edit == 'email' %}
+                                  <input type='hidden' name='edit' value='email'>
+                                  <input type="email" value="{{data.user.email}}" name='value' style='width:220px' required autofocus>
+                                  <input type="submit" value="Save">
+                                {% else %}
+                                  {{data.user.email}} | <a href="/account/?edit=email">Change</a>
+                                {% endif %}
+                                </td>
+                                </tr>
+
+                                <tr>
+                                <td><b>Password</b></td>
+                                <td>
+                                {% if data.edit == 'password' %}
+                                  <input type='hidden' name='edit' value='password'>
+                                  <input type="password" name='value' placeholder="New password" style='width:220px' required autofocus>
+                                  <input type="submit" value="Save">
+                                {% else %}
+                                  ******* | <a href="/account/?edit=password">Change</a>
+                                {% endif %}
+                                </td>
+                                </tr>
+
+                                <tr>
+                                <td><b>Email updates</b></td>
+                                <td>
+                                {% if data.edit == 'email_preferences' %}
+                                  <input type='hidden' name='edit' value='email_preferences'>
+                                  {% if data.profile.email_updates %}
+                                  <input type="checkbox" name="email_updates" value="True" checked>
+                                  {% else %}
+                                  <input type="checkbox" name="email_updates" value="True">
+                                  {% endif %}
+                                  &nbsp;<input type="submit" value="Save">
+                                {% else %}
+                                  {% if data.profile.email_updates %}Enabled{% else %}Disabled{% endif %}
+                                  | <a href="/account/?edit=email_preferences">Change</a>
+                                {% endif %}
+                                </td>
+                                </tr>
+
+                                <tr>
+                                <td><b>Danger zone</b></td>
+                                <td>
+                                {% if data.edit == 'delete_account' %}
+                                  <input type='hidden' name='edit' value='delete_account'>
+                                  Type your account ID to confirm:<br/>
+                                  <input type="text" name='value' style='width:220px' required autofocus>
+                                  <input type="submit" value="Delete" style="color:red">
+                                {% else %}
+                                  <a href="/account/?edit=delete_account" style="color:red">Delete account</a>
+                                {% endif %}
+                                </td>
+                                </tr>
+
+                                </table>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-body">
+                                <h3>Legal</h3>
+                                <table class="dashboard">
+                                <tr>
+                                <td><b>Terms accepted</b></td>
+                                <td>v{{data.profile.last_accepted_terms}}</td>
+                                </tr>
+                                <tr>
+                                <td></td>
+                                <td>
+                                  <a href="/terms/" target="_blank">Terms of Service</a> &nbsp;|&nbsp;
+                                  <a href="/privacy/" target="_blank">Privacy Policy</a>
+                                </td>
+                                </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+{% include "footer.html" %}

@@ -1,0 +1,36 @@
+{% load static %}
+{% include "header.html" %}
+{% include "navigation.html" %}
+                <br/>
+                <div class="row">
+                    <div class="col-md-6 offset-md-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <h1>Login</h1>
+                                <hr>
+                                {% if data.error %}
+                                <div class='centerbox-error'>{{ data.error }}</div>
+                                {% elif data.success %}
+                                <div class='centerbox-success'>{{ data.success }}</div>
+                                {% else %}
+                                <br/>
+                                {% endif %}
+                                <div style="text-align:center">
+                                    <form role="form" action='/login/' method='POST'>
+                                        {% csrf_token %}
+                                        <input style="max-width:300px; margin:5px auto" type="email" class="form-control" placeholder="Email" name='username' required autofocus>
+                                        <input style="max-width:300px; margin:5px auto" type="password" class="form-control" placeholder="Password" name='password'>
+                                        <br/>
+                                        <input style="width:110px; height:35px; font-size:16px" type='submit' class="btn btn-success" value='Log in'>
+                                    </form>
+                                    {% if not data.success %}
+                                    <br/><small><b>Forgot password?</b> Leave the password field empty and click "Log in" to get a login link by email.</small>
+                                    {% endif %}
+                                </div>
+                                <br/>
+                                <p style="text-align:center"><a href="/register/">Don't have an account? Sign up</a></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+{% include "footer.html" %}

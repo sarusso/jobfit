@@ -1,0 +1,75 @@
+FROM jobfit/base_ubuntu22.04
+MAINTAINER Stefano Alberto Russo <stefano.russo@gmail.com>
+
+# Always start with an apt-get update when extending base images,
+# otherwise apt repositories might get outdated (404 not found)
+# and building without cache does not re-build base images.
+RUN apt-get update
+
+#------------------------------
+# Apt requirements
+#------------------------------
+
+# Install Curl
+RUN apt-get install curl -y
+
+# Download get-pip script
+RUN curl -O https://bootstrap.pypa.io/pip/3.6/get-pip.py
+
+# Install Python3 and Pip3 (python3-distutils required for pip3)
+RUN apt-get install python3 python3-distutils -y 
+
+# Install Python3 and Pip3 (ython3-distutils required for pip3)
+RUN apt-get install python3 python3-distutils -y 
+RUN python3 get-pip.py 'pip==21.0.1'
+
+# Python 3 dev (for pycrypto)
+RUN apt-get install python3-dev -y
+
+# Install postgres driver required for psycopg2
+RUN apt-get install libpq-dev -y
+
+# Libmagic
+RUN apt-get install libmagic1 -y
+
+#------------------------------
+# Install Django project
+#------------------------------
+
+# Prepare dir
+RUN mkdir /opt/code
+
+# Install Python requirements..
+COPY requirements.txt /tmp/
+RUN cd /opt/code && pip3 install -r /tmp/requirements.txt
+
+# Patch Django 2.2 non-ascii chars in /usr/local/lib/python3.10/dist-packages/django/views/templates/technical_500.html
+RUN sed -i 's/[\x80-\xFF]/./g' /usr/local/lib/python3.10/dist-packages/django/views/templates/technical_500.html
+
+# Install App code
+COPY code /opt/code
+
+# Fix permissions
+RUN chown -R jobfit:jobfit /opt/code
+
+# Prepare for logs
+RUN mkdir /var/log/webapp/ && chown jobfit:jobfit /var/log/webapp/
+
+
+#------------------------------
+# Supervisord
+#------------------------------
+
+COPY run_webapp.sh /etc/supervisor/conf.d/
+RUN chmod 755 /etc/supervisor/conf.d/run_webapp.sh
+COPY supervisord_webapp.conf /etc/supervisor/conf.d/
+COPY supervisord_dregistrytunnel.conf /etc/supervisor/conf.d/
+
+
+#------------------------------
+# Prestartup
+#------------------------------
+
+COPY prestartup_webapp.sh /prestartup/
+RUN touch -m /prestartup/prestartup_webapp.sh
+

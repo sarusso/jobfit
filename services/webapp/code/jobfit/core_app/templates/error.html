@@ -1,0 +1,17 @@
+{% load static %}
+{% include "header.html" %}
+{% include "navigation.html" %}
+                <br/>
+                <div class="row">
+                    <div class="col-xl-12 col-lg-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h2>Error</h2>
+                                <div class='centerbox-error'>{{data.error}}</div>
+                                <br/>
+                                <p><a href="/">Go to home</a></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+{% include "footer.html" %}
