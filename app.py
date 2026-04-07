@@ -434,6 +434,7 @@ def _companies() -> list[dict]:
             data["_role_id"] = json_file.stem
             data["_has_pdf"] = json_file.with_suffix(".pdf").exists()
             data["_score"] = _load_score(company_dir.name, json_file.stem, mode)
+            data["_added_at"] = data.get("added_at") or datetime.fromtimestamp(json_file.stat().st_mtime).isoformat()
             jobs.append(data)
         if jobs:
             info_path = company_dir / "_company.json"
@@ -450,6 +451,7 @@ def _get_job(company: str, role_id: str) -> dict:
     data = _load_json(path)
     data["_role_id"] = role_id
     data["_has_pdf"] = path.with_suffix(".pdf").exists()
+    data["_added_at"] = data.get("added_at") or datetime.fromtimestamp(path.stat().st_mtime).isoformat()
     use_notes = _use_notes()
     mode = _current_mode()
     data["_score"] = _load_score(company, role_id, mode, use_notes)
@@ -470,6 +472,14 @@ def _company_names() -> list[str]:
         d.name for d in DATA_DIR.iterdir()
         if d.is_dir() and not d.name.startswith("_")
     )
+
+
+@app.template_filter("datefmt")
+def datefmt_filter(iso: str) -> str:
+    try:
+        return datetime.fromisoformat(iso).strftime("%-d %b %Y")
+    except Exception:
+        return iso[:10]
 
 
 @app.context_processor
@@ -542,6 +552,7 @@ def company_view(company: str):
         data["_role_id"] = json_file.stem
         data["_has_pdf"] = json_file.with_suffix(".pdf").exists()
         data["_score"] = _load_score(company, json_file.stem, mode)
+        data["_added_at"] = data.get("added_at") or datetime.fromtimestamp(json_file.stat().st_mtime).isoformat()
         jobs.append(data)
     jobs.sort(key=lambda j: (j["_score"] or {}).get("score", 0), reverse=True)
     return render_template("company.html", company=company, jobs=jobs, company_info=company_info)
@@ -656,12 +667,10 @@ def _save_job(company_raw: str, job_data: dict, pdf_bytes: bytes | None = None) 
     company_dir.mkdir(parents=True, exist_ok=True)
 
     role_id = _make_role_id(title)
-    base_id = role_id
-    counter = 1
-    while (company_dir / f"{role_id}.json").exists():
-        role_id = f"{base_id}_{counter}"
-        counter += 1
+    if (company_dir / f"{role_id}.json").exists():
+        raise ValueError(f'A job titled "{title}" already exists for {company_raw}.')
 
+    job_data.setdefault("added_at", datetime.now().isoformat())
     if pdf_bytes:
         (company_dir / f"{role_id}.pdf").write_bytes(pdf_bytes)
     with open(company_dir / f"{role_id}.json", "w", encoding="utf-8") as f:
@@ -732,7 +741,12 @@ def add_job_url():
         return redirect(ref.split("?")[0] + "?modal=add-jobs")
     job_data["company"] = resolved
     job_data["source"]  = "url" if url else "manual"
-    company, role_id = _save_job(resolved, job_data, pdf_bytes)
+    try:
+        company, role_id = _save_job(resolved, job_data, pdf_bytes)
+    except ValueError as e:
+        flash(str(e), "warning")
+        ref = request.referrer or url_for("index")
+        return redirect(ref.split("?")[0] + "?modal=add-jobs")
     return redirect(url_for("job_view", company=company, role_id=role_id))
 
 
@@ -761,7 +775,12 @@ def add_job_text():
         return redirect(ref.split("?")[0] + "?modal=add-jobs")
     job_data["company"] = resolved
     job_data["source"]  = "text"
-    company, role_id = _save_job(resolved, job_data)
+    try:
+        company, role_id = _save_job(resolved, job_data)
+    except ValueError as e:
+        flash(str(e), "warning")
+        ref = request.referrer or url_for("index")
+        return redirect(ref.split("?")[0] + "?modal=add-jobs")
     return redirect(url_for("job_view", company=company, role_id=role_id))
 
 
@@ -796,6 +815,15 @@ def scrape_categories():
         except Exception as e:
             return json.dumps({"error": str(e)}), 500
 
+    for job in jobs:
+        job_url = job.get("url", "")
+        if job_url:
+            role_id = hashlib.sha256(job_url.encode()).hexdigest()
+            job["exists"] = any(
+                (d / f"{role_id}.json").exists()
+                for d in DATA_DIR.iterdir()
+                if d.is_dir() and not d.name.startswith("_")
+            )
     return json.dumps({"jobs": jobs, "base_url": base_url})
 
 

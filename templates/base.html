@@ -12,6 +12,7 @@
     .badge-type  { background: #e8f4fd; color: #1a6fa8; }
     .badge-level { background: #edf7ed; color: #2a7a2a; }
     .badge-loc   { background: #fdf3e8; color: #a85c1a; }
+    .badge-date  { background: #f0ecfb; color: #6b3fa0; }
     .section-title { font-size: .7rem; font-weight: 700; text-transform: uppercase;
                      letter-spacing: .08em; color: #888; margin-bottom: .4rem; }
     .job-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transition: box-shadow .15s ease; }
@@ -593,12 +594,13 @@
           const safeTitle   = job.title.replace(/"/g, '&quot;');
           const safeUrl     = job.url.replace(/"/g, '&quot;');
           const safeCompany = (job.company || '').replace(/"/g, '&quot;');
-          return `<div class="d-flex align-items-center ps-4 py-1 border-bottom border-light">
+          const alreadyIn   = !!job.exists;
+          return `<div class="d-flex align-items-center ps-4 py-1 border-bottom border-light${alreadyIn ? ' bg-light' : ''}">
             <input class="form-check-input job-check flex-shrink-0 me-2" type="checkbox"
                    data-cat="${ci}" value="${safeUrl}" data-title="${safeTitle}" data-company="${safeCompany}"
-                   id="${jobId}" checked onchange="updateCatToggle(${ci})">
-            <label class="form-check-label small text-truncate" for="${jobId}" style="max-width:100%"
-                   title="${safeTitle}">${job.title}</label>
+                   id="${jobId}" ${alreadyIn ? '' : 'checked'} onchange="updateCatToggle(${ci})">
+            <label class="form-check-label small text-truncate${alreadyIn ? ' text-muted' : ''}" for="${jobId}" style="max-width:100%"
+                   title="${safeTitle}">${job.title}${alreadyIn ? ' <span class="badge bg-secondary ms-1" style="font-size:.65em">already imported</span>' : ''}</label>
           </div>`;
         }).join('');
         return `<div class="border rounded mb-2 overflow-hidden">

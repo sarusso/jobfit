@@ -74,6 +74,7 @@
           {% if job.salary and job.salary != 'null' %}
           <span class="badge bg-light text-dark border">{{ job.salary }}</span>
           {% endif %}
+          <span class="badge badge-date">{{ job._added_at | datefmt }}</span>
         </div>
         {% if job.summary %}
         <p class="text-muted mb-1 small">{{ job.summary }}</p>

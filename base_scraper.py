@@ -18,6 +18,7 @@ import re
 import shutil
 import sys
 from abc import ABC, abstractmethod
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -176,6 +177,7 @@ class BaseScraper(ABC):
             job_data = {k: v for k, v in job.items() if k != "company_description"}
             if company_name:
                 job_data["company"] = company_name
+            job_data.setdefault("added_at", datetime.now().isoformat())
             with open(dest_dir / f"{role_id}.json", "w", encoding="utf-8") as f:
                 json.dump(job_data, f, indent=2, ensure_ascii=False)
             company_file = dest_dir / "_company.json"
