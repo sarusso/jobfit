@@ -711,7 +711,13 @@ def add_job_url():
             abort(400, "Please upload a PDF or TXT file.")
     else:
         log.info("Rendering URL to PDF: %s", url)
-        pdf_bytes, jd_text = _url_to_pdf_and_text(url)
+        try:
+            pdf_bytes, jd_text = _url_to_pdf_and_text(url)
+        except Exception as e:
+            log.warning("Failed to render URL %s: %s", url, e)
+            flash(f"Could not load the URL (timed out or unreachable). Try uploading a PDF or pasting the text instead.", "danger")
+            ref = request.referrer or url_for("index")
+            return redirect(ref.split("?")[0] + "?modal=add-jobs")
 
     job_data = _analyse_jd(jd_text, client, url=url)
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
