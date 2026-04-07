@@ -2,22 +2,31 @@
 {% block title %}JobFit — Account{% endblock %}
 
 {% block content %}
+<style>
+  .account-row { display:flex; align-items:baseline; gap:1rem; padding:.6rem 0; border-bottom:1px solid #f0f0f0; }
+  .account-row:last-child { border-bottom:none; }
+  .account-label { flex:0 0 9rem; font-size:.8rem; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:#6c757d; padding-top:.15rem; }
+  .account-value { flex:1; font-size:.95rem; }
+</style>
+
 <div class="row g-4">
 
   <!-- Basic info -->
   <div class="col-lg-6">
     <div class="card shadow-sm">
       <div class="card-header fw-bold">Basic info</div>
-      <div class="card-body">
+      <div class="card-body px-3 py-2">
         <form action="/account/" method="post">
           {% csrf_token %}
-          <dl class="mb-0">
 
-            <dt class="text-muted small">Account ID</dt>
-            <dd class="mb-3">{{ data.user.username }} &nbsp;|&nbsp; <a href="/logout/">Logout</a></dd>
+          <div class="account-row">
+            <div class="account-label">Account ID</div>
+            <div class="account-value">{{ data.user.username }} &nbsp;|&nbsp; <a href="/logout/" class="small">Logout</a></div>
+          </div>
 
-            <dt class="text-muted small">Email</dt>
-            <dd class="mb-3">
+          <div class="account-row">
+            <div class="account-label">Email</div>
+            <div class="account-value">
               {% if data.edit == 'email' %}
               <div class="input-group input-group-sm">
                 <input type="hidden" name="edit" value="email">
@@ -25,12 +34,14 @@
                 <button class="btn btn-outline-secondary" type="submit">Save</button>
               </div>
               {% else %}
-              {{ data.user.email }} &nbsp;|&nbsp; <a href="/account/?edit=email">Change</a>
+              {{ data.user.email }} &nbsp;|&nbsp; <a href="/account/?edit=email" class="small">Change</a>
               {% endif %}
-            </dd>
+            </div>
+          </div>
 
-            <dt class="text-muted small">Password</dt>
-            <dd class="mb-3">
+          <div class="account-row">
+            <div class="account-label">Password</div>
+            <div class="account-value">
               {% if data.edit == 'password' %}
               <div class="input-group input-group-sm">
                 <input type="hidden" name="edit" value="password">
@@ -38,35 +49,43 @@
                 <button class="btn btn-outline-secondary" type="submit">Save</button>
               </div>
               {% else %}
-              ******* &nbsp;|&nbsp; <a href="/account/?edit=password">Change</a>
+              ******* &nbsp;|&nbsp; <a href="/account/?edit=password" class="small">Change</a>
               {% endif %}
-            </dd>
+            </div>
+          </div>
 
-            <dt class="text-muted small">Email preferences</dt>
-            <dd class="mb-3">
+          <div class="account-row">
+            <div class="account-label">Email prefs</div>
+            <div class="account-value">
               {% if data.edit == 'email_preferences' %}
               <input type="hidden" name="edit" value="email_preferences">
               <input type="hidden" name="do_update" value="True">
-              <div class="d-flex flex-column gap-1 mb-2">
-                <label class="d-flex align-items-center gap-2 small">
-                  <input type="checkbox" checked disabled> Account-related emails
-                </label>
-                <label class="d-flex align-items-center gap-2 small">
-                  <input type="checkbox" name="email_updates" value="True" {% if data.user.profile.email_updates %}checked{% endif %}> JobFit updates
-                </label>
+              <div class="d-flex align-items-center gap-3">
+                <div class="d-flex flex-column gap-1">
+                  <label class="d-flex align-items-center gap-2 small">
+                    <input type="checkbox" checked disabled> Account-related emails
+                  </label>
+                  <label class="d-flex align-items-center gap-2 small">
+                    <input type="checkbox" name="email_updates" value="True" {% if data.user.profile.email_updates %}checked{% endif %}> JobFit updates
+                  </label>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary" type="submit">Save</button>
               </div>
-              <button class="btn btn-sm btn-outline-secondary" type="submit">Save</button>
               {% else %}
-              <div class="d-flex flex-column gap-1 small text-muted mb-1">
-                <span><input type="checkbox" checked disabled class="me-1"> Account-related emails</span>
-                <span><input type="checkbox" {% if data.user.profile.email_updates %}checked{% endif %} disabled class="me-1"> JobFit updates</span>
+              <div class="d-flex align-items-center gap-3">
+                <div class="d-flex flex-column gap-1 small text-muted">
+                  <span><input type="checkbox" checked disabled class="me-1"> Account-related emails</span>
+                  <span><input type="checkbox" {% if data.user.profile.email_updates %}checked{% endif %} disabled class="me-1"> JobFit updates</span>
+                </div>
+                <a href="/account/?edit=email_preferences" class="small">Change</a>
               </div>
-              <a href="/account/?edit=email_preferences">Change</a>
               {% endif %}
-            </dd>
+            </div>
+          </div>
 
-            <dt class="text-muted small">Danger zone</dt>
-            <dd class="mb-0">
+          <div class="account-row">
+            <div class="account-label">Danger zone</div>
+            <div class="account-value">
               {% if data.edit == 'delete_account' %}
               <div class="input-group input-group-sm">
                 <input type="hidden" name="edit" value="delete_account">
@@ -76,9 +95,9 @@
               {% else %}
               <a href="/account/?edit=delete_account" class="text-danger">Delete account</a>
               {% endif %}
-            </dd>
+            </div>
+          </div>
 
-          </dl>
         </form>
       </div>
     </div>
@@ -88,24 +107,26 @@
   <div class="col-lg-6">
     <div class="card shadow-sm">
       <div class="card-header fw-bold">Profile</div>
-      <div class="card-body">
+      <div class="card-body px-3 py-2">
         <form action="/account/" method="post">
           {% csrf_token %}
-          <dl class="mb-0">
 
-            <dt class="text-muted small">Time Zone</dt>
-            <dd class="mb-3">
+          <div class="account-row">
+            <div class="account-label">Time Zone</div>
+            <div class="account-value">
               {% if data.edit == 'timezone' %}
               <input type="hidden" name="edit" value="timezone">
               {% include "components/tzselect.html" %}
               <button class="btn btn-sm btn-outline-secondary mt-2" type="submit">Save</button>
               {% else %}
-              {{ data.profile.timezone }} &nbsp;|&nbsp; <a href="/account/?edit=timezone">Change</a>
+              {{ data.profile.timezone }} &nbsp;|&nbsp; <a href="/account/?edit=timezone" class="small">Change</a>
               {% endif %}
-            </dd>
+            </div>
+          </div>
 
-            <dt class="text-muted small">Profile type</dt>
-            <dd class="mb-3">
+          <div class="account-row">
+            <div class="account-label">Profile type</div>
+            <div class="account-value">
               {% if data.edit == 'type' %}
               <input type="hidden" name="edit" value="type">
               <div class="input-group input-group-sm">
@@ -116,14 +137,16 @@
                 <button class="btn btn-outline-secondary" type="submit">Save</button>
               </div>
               {% else %}
-              {{ data.profile.type }} &nbsp;|&nbsp; <a href="/account/?edit=type">Change</a>
+              {{ data.profile.type }} &nbsp;|&nbsp; <a href="/account/?edit=type" class="small">Change</a>
               {% endif %}
-            </dd>
+            </div>
+          </div>
 
-            <dt class="text-muted small">Plan</dt>
-            <dd class="mb-0">{{ data.profile.plan }}</dd>
+          <div class="account-row">
+            <div class="account-label">Plan</div>
+            <div class="account-value">{{ data.profile.plan }}</div>
+          </div>
 
-          </dl>
         </form>
       </div>
     </div>

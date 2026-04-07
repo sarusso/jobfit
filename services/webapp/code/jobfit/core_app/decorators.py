@@ -3,6 +3,7 @@ import inspect
 from django.conf import settings
 from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseRedirect
+from django.http.response import HttpResponseBase
 from .utils import format_exception, log_user_activity
 from .exceptions import ErrorMessage, ConsistencyException
 
@@ -36,7 +37,7 @@ def public_view(wrapped_view):
             # Call wrapped view
             data = wrapped_view(request, *argv, **kwargs)
 
-            if not isinstance(data, HttpResponse):
+            if not isinstance(data, HttpResponseBase):
                 if template:
                     #logger.debug('using template + data ("{}","{}")'.format(template,data))
                     return render(request, template, {'data': data})
@@ -94,7 +95,7 @@ def private_view(wrapped_view):
                 # Call wrapped view
                 data = wrapped_view(request, *argv, **kwargs)
 
-                if not isinstance(data, HttpResponse):
+                if not isinstance(data, HttpResponseBase):
                     if template:
                         #logger.debug('using template + data ("{}","{}")'.format(template,data))
                         return render(request, template, {'data': data})

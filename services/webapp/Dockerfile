@@ -46,8 +46,10 @@ RUN cd /opt/code && pip3 install -r /tmp/requirements.txt
 # Patch Django 2.2 non-ascii chars in /usr/local/lib/python3.10/dist-packages/django/views/templates/technical_500.html
 RUN sed -i 's/[\x80-\xFF]/./g' /usr/local/lib/python3.10/dist-packages/django/views/templates/technical_500.html
 
-# Install Playwright browser
-RUN pip3 install playwright && playwright install chromium && playwright install-deps chromium
+# Install Playwright browser to a fixed path accessible by all users
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN pip3 install playwright && playwright install chromium && playwright install-deps chromium \
+    && chmod -R a+rX /opt/playwright-browsers
 
 # Install App code
 COPY code /opt/code

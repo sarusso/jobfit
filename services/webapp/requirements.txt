@@ -3,8 +3,8 @@ psycopg2==2.8
 pytz==2022.7.1
 uwsgi==2.0.20
 django-extensions
-openai
-beautifulsoup4
-pypdf
-requests
-playwright
+openai==2.30.0
+beautifulsoup4==4.14.3
+pypdf==6.9.2
+requests==2.33.1
+playwright==1.58.0
