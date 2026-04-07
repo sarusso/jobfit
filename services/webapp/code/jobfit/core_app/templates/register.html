@@ -1,59 +1,61 @@
-{% load static %}
-{% load settings_value %}
-{% include "header.html" %}
-{% include "navigation.html" %}
-{% settings_value "CONTACT_EMAIL" as CONTACT_EMAIL %}
-                <br/>
-                <div class="row">
-                    <div class="col-md-6 offset-md-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h1>Sign up</h1>
-                                <hr>
+{% extends "base_simple.html" %}
+{% block title %}JobFit — Sign up{% endblock %}
 
-                                {% if data.status == "activated" %}
-                                <div class='centerbox-success'>Account created successfully.</div>
-                                <br/>
-                                <p><b>Welcome to JobFit!</b></p>
-                                <p style="margin-top:10px"><a href="/account/">Go to your account</a></p>
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h2 class="mb-4">Sign up</h2>
 
-                                {% else %}
+        {% if data.status == "activated" %}
+        <div class="alert alert-success py-2">Account created successfully.</div>
+        <p class="mt-3"><strong>Welcome to JobFit!</strong></p>
+        <p><a href="/account/">Go to your account</a></p>
 
-                                {% if data.require_invitation %}
-                                <p>We are currently in private beta — you need an invitation code to register. Get in touch at <a href="mailto:{{CONTACT_EMAIL}}">{{CONTACT_EMAIL}}</a> to request one.</p>
-                                {% endif %}
+        {% else %}
 
-                                {% if data.error %}
-                                <div class='centerbox-error'>{{ data.error }}</div>
-                                <br/>
-                                {% endif %}
+        {% if data.require_invitation %}
+        <p class="text-muted small">We are currently in private beta — you need an invitation code to register.</p>
+        {% endif %}
 
-                                <div style="text-align:center">
-                                    <form role="form" action='/register/' method='POST'>
-                                        {% csrf_token %}
-                                        <input style="max-width:320px; margin:5px auto" type="email" class="form-control" placeholder="Email" name='email' required autofocus>
-                                        <input style="max-width:320px; margin:5px auto" type="password" class="form-control" placeholder="Password (min 6 chars)" name='password' required>
-                                        {% if data.require_invitation %}
-                                        <input style="max-width:320px; margin:5px auto" type="text" class="form-control" placeholder="Invitation code" name='invitation' required>
-                                        {% endif %}
-                                        <p style="margin-top:15px; font-size:0.95em">
-                                            Send me updates about new features&nbsp;
-                                            <input type="checkbox" name="email_updates" value="True" checked>
-                                        </p>
-                                        <p style="font-size:0.95em">
-                                            I accept the <a href="/terms/" target="_blank">Terms of Service</a> and <a href="/privacy/" target="_blank">Privacy Policy</a>&nbsp;
-                                            <input type="checkbox" name="terms_accepted" value="True" required>
-                                        </p>
-                                        <br/>
-                                        <input style="width:110px; height:35px; font-size:16px" type='submit' class="btn btn-success" value='Sign up'>
-                                    </form>
-                                </div>
-                                <br/>
-                                <p style="text-align:center"><a href="/login/">Already have an account? Login</a></p>
+        {% if data.error %}
+        <div class="alert alert-danger py-2">{{ data.error }}</div>
+        {% endif %}
 
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-{% include "footer.html" %}
+        <form action="/register/" method="post">
+          {% csrf_token %}
+          <div class="mb-3">
+            <input type="email" class="form-control" placeholder="Email" name="email" required autofocus>
+          </div>
+          <div class="mb-3">
+            <input type="password" class="form-control" placeholder="Password (min 6 chars)" name="password" required>
+          </div>
+          {% if data.require_invitation %}
+          <div class="mb-3">
+            <input type="text" class="form-control" placeholder="Invitation code" name="invitation" required>
+          </div>
+          {% endif %}
+          <div class="mb-2 small">
+            <label class="d-flex align-items-center gap-2">
+              <input type="checkbox" name="email_updates" value="True" checked>
+              Send me updates about new features
+            </label>
+          </div>
+          <div class="mb-3 small">
+            <label class="d-flex align-items-center gap-2">
+              <input type="checkbox" name="terms_accepted" value="True" required>
+              I accept the <a href="/terms/" target="_blank">Terms of Service</a> and <a href="/privacy/" target="_blank">Privacy Policy</a>
+            </label>
+          </div>
+          <button type="submit" class="btn btn-success w-100">Sign up</button>
+        </form>
+        <hr>
+        <p class="text-center mb-0"><a href="/login/">Already have an account? Login</a></p>
+
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

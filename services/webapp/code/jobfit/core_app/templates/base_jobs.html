@@ -1,0 +1,730 @@
+{% load jobs_tags %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}JobFit{% endblock %}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👔</text></svg>">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; }
+    .navbar-brand { font-weight: 700; letter-spacing: .03em; }
+    .badge-type  { background: #e8f4fd; color: #1a6fa8; }
+    .badge-level { background: #edf7ed; color: #2a7a2a; }
+    .badge-loc   { background: #fdf3e8; color: #a85c1a; }
+    .badge-date  { background: #f0ecfb; color: #6b3fa0; }
+    .section-title { font-size: .7rem; font-weight: 700; text-transform: uppercase;
+                     letter-spacing: .08em; color: #888; margin-bottom: .4rem; }
+    .job-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transition: box-shadow .15s ease; }
+    .list-item { border-left: 3px solid #dee2e6; padding-left: .75rem; margin-bottom: .4rem; }
+    pre { white-space: pre-wrap; word-break: break-word; }
+    #addJobsModal .tab-pane { padding: 1.5rem 0 0.5rem; }
+    #cvModal .modal-content, #notesModal .modal-content, #addJobsModal .modal-content { min-height: 450px; }
+    .breadcrumb-item a { color: #2679f3; text-decoration: none; }
+    .breadcrumb-item a:hover { color: #1a5bbf; }
+    .score-high   { background: #d4edda; color: #155724; }
+    .score-mid    { background: #fff3cd; color: #856404; }
+    .score-low    { background: #f8d7da; color: #721c24; }
+    .score-none   { background: #e9ecef; color: #6c757d; }
+    #scoring-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.55); z-index: 9999;
+      flex-direction: column; align-items: center; justify-content: center; gap: 1.25rem;
+    }
+    #scoring-overlay.active { display: flex; }
+    .scoring-spinner {
+      width: 3rem; height: 3rem;
+      border: 4px solid rgba(255,255,255,.3); border-top-color: #fff;
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container d-flex align-items-center gap-3 position-relative">
+      <a class="navbar-brand me-0" href="{% url 'jobs_index' %}">&#128084; JobFit</a>
+
+      {# ── Scoring toggles — absolutely centred ── #}
+      <div class="position-absolute start-50 translate-middle-x d-flex align-items-center gap-2 px-3 py-1 rounded" style="background:rgba(255,255,255,.07)">
+        <span class="text-white-50 me-1" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;font-weight:600">Scoring</span>
+        <form action="{% url 'jobs_set_mode' %}" method="post" id="modeForm" class="d-flex align-items-center gap-2 m-0">
+          {% csrf_token %}
+          <input type="hidden" name="mode" value="{{ scoring_mode }}">
+          <label for="modeToggle" class="text-white small mb-0" style="cursor:pointer">brutal</label>
+          <div class="form-check form-switch m-0">
+            <input class="form-check-input" type="checkbox" id="modeToggle"
+                   {% if scoring_mode == "brutal" %}checked{% endif %}
+                   onchange="document.querySelector('#modeForm [name=mode]').value=this.checked?'brutal':'normal'; this.form.submit()">
+          </div>
+        </form>
+        <div class="vr" style="opacity:.25"></div>
+        <form action="{% url 'jobs_set_notes' %}" method="post" id="notesToggleForm" class="d-flex align-items-center gap-2 m-0">
+          {% csrf_token %}
+          <input type="hidden" name="use_notes" value="{% if use_notes %}1{% else %}0{% endif %}">
+          <label for="notesToggle" class="text-white small mb-0" style="cursor:pointer">w/notes</label>
+          <div class="form-check form-switch m-0">
+            <input class="form-check-input" type="checkbox" id="notesToggle"
+                   {% if use_notes %}checked{% endif %}
+                   onchange="document.querySelector('#notesToggleForm [name=use_notes]').value=this.checked?'1':'0'; this.form.submit()">
+          </div>
+        </form>
+      </div>
+
+      {# ── Notes button ── #}
+      <button type="button" class="btn btn-sm {% if candidate_notes %}btn-warning{% else %}btn-outline-light{% endif %} ms-auto"
+              data-bs-toggle="modal" data-bs-target="#notesModal"
+              title="{% if candidate_notes %}Personal notes active — included in every score{% else %}Add personal notes to improve scoring{% endif %}">&#128221; Notes</button>
+
+      {# ── CV button ── #}
+      <button type="button" class="btn btn-sm {% if cv_uploaded %}btn-success{% else %}btn-outline-warning{% endif %}"
+              data-bs-toggle="modal" data-bs-target="#cvModal">&#128196; CV</button>
+
+      {# ── Add Jobs button ── #}
+      <button type="button" class="btn btn-sm btn-outline-light"
+              data-bs-toggle="modal" data-bs-target="#addJobsModal">&#10010; Jobs</button>
+
+      {# ── Hamburger ── #}
+      <button class="btn btn-sm btn-outline-light" type="button"
+              data-bs-toggle="offcanvas" data-bs-target="#sideMenu" aria-controls="sideMenu">
+        &#9776;
+      </button>
+    </div>
+  </nav>
+
+  {# ── Side menu offcanvas ── #}
+  <div class="offcanvas offcanvas-end" tabindex="-1" id="sideMenu" style="max-width:260px">
+    <div class="offcanvas-header border-bottom">
+      <span class="fw-bold">&#128084; JobFit</span>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body p-0">
+      <nav class="nav flex-column pt-2">
+        <a class="nav-link px-4 py-2" href="{% url 'jobs_index' %}">&#127968; Home</a>
+        <a class="nav-link px-4 py-2" href="{% url 'jobs_help' %}">&#10067; Help</a>
+        <hr class="my-1 mx-4">
+        <a class="nav-link px-4 py-2" href="/account/">&#128100; Account</a>
+        <a class="nav-link px-4 py-2" href="/logout/">&#128275; Logout</a>
+      </nav>
+    </div>
+  </div>
+
+  {# ── Scoring overlay ── #}
+  <div id="scoring-overlay">
+    <div id="overlay-spinner" class="scoring-spinner"></div>
+    <div id="overlay-progress" style="display:none; width: 22rem;">
+      <div class="text-white fs-6 mb-2 text-center" id="overlay-label">Scoring…</div>
+      <div class="progress" style="height: .6rem; border-radius: 1rem; background: rgba(255,255,255,.2);">
+        <div id="overlay-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+             style="width: 0%"></div>
+      </div>
+      <div class="text-white-50 small mt-2 text-center" id="overlay-sub"></div>
+    </div>
+    <span id="overlay-single-label" class="text-white fs-6">Scoring against CV…</span>
+  </div>
+
+  {# ── Messages ── #}
+  {% if messages %}
+  <div class="container mb-0 pb-0">
+    {% for message in messages %}
+    <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show py-2 mb-2" role="alert">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="container pb-5">
+    {% block content %}{% endblock %}
+  </div>
+
+  <!-- CV modal -->
+  <div class="modal fade" id="cvModal" tabindex="-1" aria-labelledby="cvModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header" style="background:#f8f9fa;border-radius:.375rem .375rem 0 0">
+          <h5 class="modal-title" id="cvModalLabel">&#128196; CVs</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3">Each CV is stored independently. Scores are cached per CV — switching between them never overwrites each other's cache.</p>
+
+          {% if all_cvs %}
+          <div class="d-flex flex-column gap-2 mb-4">
+            {% for cv in all_cvs %}
+            <div class="d-flex align-items-center gap-3 p-3 border rounded {% if cv.selected %}border-success bg-light{% else %}bg-white{% endif %}">
+              <div class="d-flex align-items-center justify-content-center rounded flex-shrink-0 text-white fw-bold"
+                   style="width:2.8rem;height:3.5rem;background:{% if cv.selected %}#198754{% else %}#adb5bd{% endif %};font-size:.6rem;letter-spacing:.04em">PDF</div>
+              <div class="flex-grow-1 min-width-0">
+                <form action="{% url 'jobs_cv_rename' cv.hash %}" method="post" class="d-flex align-items-center gap-1 mb-1">
+                  {% csrf_token %}
+                  <input type="text" name="name" value="{{ cv.name }}"
+                         class="form-control form-control-sm fw-semibold border-0 bg-transparent px-1"
+                         style="min-width:0" id="cv-name-{{ cv.hash }}"
+                         onchange="document.getElementById('cv-save-{{ cv.hash }}').classList.remove('d-none')">
+                  <button type="submit" id="cv-save-{{ cv.hash }}" class="btn btn-sm btn-outline-success d-none">&#10003;</button>
+                </form>
+                <div class="text-muted" style="font-size:.75rem">Uploaded {{ cv.uploaded }}</div>
+              </div>
+              <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                {% if cv.selected %}
+                  <span class="badge bg-success d-inline-flex align-items-center" style="height:2rem;padding:0 .6rem;font-size:.75rem">Active</span>
+                {% else %}
+                  <form action="{% url 'jobs_cv_select' cv.hash %}" method="post" class="m-0">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-success">Make active</button>
+                  </form>
+                {% endif %}
+                <a href="{% url 'jobs_cv_view_specific' cv.hash %}" target="_blank" class="btn btn-sm btn-outline-secondary">View</a>
+                <form action="{% url 'jobs_cv_delete' cv.hash %}" method="post" class="m-0">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-danger"
+                          onclick="return confirm('Delete this CV? Its cached scores will no longer be accessible.')">&#128465;</button>
+                </form>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="text-center text-muted py-3 mb-3">
+            <div class="d-flex align-items-center justify-content-center rounded text-white fw-bold mx-auto mb-2"
+                 style="width:2.8rem;height:3.5rem;background:#dee2e6;font-size:.6rem">PDF</div>
+            <p class="small mb-0">No CV uploaded yet.</p>
+          </div>
+          {% endif %}
+
+          <div class="border-top pt-3">
+            <p class="text-muted small mb-2 fw-semibold">{% if all_cvs %}Add another CV{% else %}Upload your CV{% endif %}</p>
+            <form action="{% url 'jobs_cv_upload' %}" method="post" enctype="multipart/form-data" class="m-0">
+              {% csrf_token %}
+              <label class="btn {% if all_cvs %}btn-outline-primary{% else %}btn-warning{% endif %} mb-0" style="cursor:pointer">
+                &#128228; {% if all_cvs %}Upload…{% else %}Upload CV{% endif %}
+                <input type="file" name="cv" accept=".pdf" class="d-none" onchange="this.form.submit()">
+              </label>
+            </form>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Personal notes modal -->
+  <div class="modal fade" id="notesModal" tabindex="-1" aria-labelledby="notesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <form action="{% url 'jobs_notes_save' %}" method="post">
+        {% csrf_token %}
+        <div class="modal-content">
+          <div class="modal-header" style="background:#f8f9fa;border-radius:.375rem .375rem 0 0">
+            <h5 class="modal-title" id="notesModalLabel">&#128221; Personal notes</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-muted small mb-3">
+              Write anything about your background that your CV doesn't make explicit — technologies, projects, papers, context.
+              This text is injected into every scoring call as authoritative candidate context.
+            </p>
+            <textarea name="notes" class="form-control font-monospace" rows="10"
+                      placeholder="e.g. I designed and published research on microservices for HPC. I have 8 years of hands-on Kubernetes experience not fully detailed in my CV.">{{ candidate_notes }}</textarea>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Jobs modal -->
+  <div class="modal fade" id="addJobsModal" tabindex="-1" aria-labelledby="addJobsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header pb-0 border-0" style="background:#f8f9fa;border-radius:.375rem .375rem 0 0">
+          <div class="w-100">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h5 class="modal-title mb-0" id="addJobsModalLabel">Add Jobs</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            {% if not has_openai_key %}
+            <div class="alert alert-warning small mb-2">
+              <strong>No OpenAI key configured.</strong> URL and text analysis require <code>OPENAI_KEY</code>.
+              Scraping will still save PDFs, but no structured JSON will be extracted.
+            </div>
+            {% endif %}
+            <ul class="nav nav-tabs" id="addJobsTabs">
+              <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-url">URL</button></li>
+              <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-file">File</button></li>
+              <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-text">Paste text</button></li>
+              <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-scrape">Scrape</button></li>
+            </ul>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div class="tab-content">
+
+            {# Tab 1: URL #}
+            <div class="tab-pane fade show active" id="tab-url">
+              <form action="{% url 'jobs_add_url' %}" method="post" enctype="multipart/form-data" id="urlForm">
+                {% csrf_token %}
+                <div class="mb-3">
+                  <label class="form-label fw-semibold">Company</label>
+                  <input type="text" name="company" class="form-control" list="company-datalist" placeholder="auto-detect" autocomplete="off">
+                </div>
+                <div class="mb-4">
+                  <label class="form-label fw-semibold">Job posting URL</label>
+                  <input type="url" name="jd_url" class="form-control" placeholder="https://…">
+                </div>
+                <button type="submit" class="btn btn-primary" id="urlSubmit" {% if not has_openai_key %}disabled{% endif %}>Add job</button>
+                {% if not has_openai_key %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+              </form>
+            </div>
+
+            {# Tab 2: File #}
+            <div class="tab-pane fade" id="tab-file">
+              <form action="{% url 'jobs_add_url' %}" method="post" enctype="multipart/form-data" id="fileForm">
+                {% csrf_token %}
+                <div class="mb-3">
+                  <label class="form-label fw-semibold">Company</label>
+                  <input type="text" name="company" class="form-control" list="company-datalist" placeholder="auto-detect" autocomplete="off">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label fw-semibold">Upload file <span class="fw-normal text-muted small">(PDF or TXT)</span></label>
+                  <input type="file" name="jd_pdf" class="form-control" accept=".pdf,.txt">
+                </div>
+                <div class="mb-4">
+                  <label class="form-label fw-semibold">Job posting URL <span class="fw-normal text-muted small">(optional)</span></label>
+                  <input type="url" name="jd_url" class="form-control" placeholder="https://…">
+                </div>
+                <button type="submit" class="btn btn-primary" id="fileSubmit" {% if not has_openai_key %}disabled{% endif %}>Add job</button>
+                {% if not has_openai_key %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+              </form>
+            </div>
+
+            {# Tab 3: Paste text #}
+            <div class="tab-pane fade" id="tab-text">
+              <form action="{% url 'jobs_add_text' %}" method="post" id="textForm">
+                {% csrf_token %}
+                <div class="mb-3">
+                  <label class="form-label fw-semibold">Company</label>
+                  <input type="text" name="company" class="form-control" list="company-datalist" placeholder="auto-detect" autocomplete="off">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label fw-semibold">Job description</label>
+                  <textarea name="text" class="form-control font-monospace" rows="4" placeholder="Paste the full job description here…" required></textarea>
+                </div>
+                <div class="mb-4">
+                  <label class="form-label fw-semibold">Job posting URL <span class="fw-normal text-muted small">(optional)</span></label>
+                  <input type="url" name="jd_url" class="form-control" placeholder="https://…">
+                </div>
+                <button type="submit" class="btn btn-primary" id="textSubmit" {% if not has_openai_key %}disabled{% endif %}>Add job</button>
+                {% if not has_openai_key %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+              </form>
+            </div>
+
+            {# Tab 4: Scrape #}
+            <div class="tab-pane fade" id="tab-scrape">
+              <div id="scrapeStep1">
+                <div class="row g-3 mb-3 align-items-end">
+                  <div class="col-sm-3">
+                    <label class="form-label fw-semibold">Board</label>
+                    <select id="scrapeBoard" class="form-select" onchange="updateBoardFields()">
+                      <option value="generic" selected>Generic</option>
+                      <option value="lever">Lever</option>
+                    </select>
+                  </div>
+                  <div class="col-sm-9 d-none" id="fieldLeverSlug">
+                    <label class="form-label fw-semibold">Company slug</label>
+                    <input type="text" id="scrapeCompany" class="form-control" placeholder="e.g. mistral">
+                  </div>
+                  <div class="col-sm-9" id="fieldGeneric">
+                    <div class="row g-2">
+                      <div class="col-sm-8">
+                        <label class="form-label fw-semibold">Careers page URL</label>
+                        <input type="url" id="scrapeUrl" class="form-control" placeholder="https://company.com/careers">
+                      </div>
+                      <div class="col-sm-4">
+                        <label class="form-label fw-semibold">Company name</label>
+                        <input type="text" id="scrapeCompanyName" class="form-control" placeholder="auto-detect">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <details class="mb-3" id="advancedDetails">
+                  <summary class="text-muted small" style="cursor:pointer">Advanced</summary>
+                  <div class="mt-2 d-flex flex-column gap-3">
+                    <div class="d-flex gap-3">
+                      <div style="max-width:8rem">
+                        <label class="form-label fw-semibold small">Limit</label>
+                        <input type="number" id="scrapeLimit" class="form-control form-control-sm" placeholder="all" min="1">
+                      </div>
+                      <div style="max-width:8rem">
+                        <label class="form-label fw-semibold small">Page timeout (s)</label>
+                        <input type="number" id="scrapeTimeout" class="form-control form-control-sm" placeholder="30" min="5" value="30">
+                      </div>
+                      <div style="max-width:8rem">
+                        <label class="form-label fw-semibold small">OpenAI timeout (s)</label>
+                        <input type="number" id="scrapeOpenaiTimeout" class="form-control form-control-sm" placeholder="120" min="10" value="120">
+                      </div>
+                    </div>
+                    <div id="fieldMultiCompany">
+                      <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="scrapeMultiCompany">
+                        <label class="form-check-label small fw-semibold" for="scrapeMultiCompany">Multiple companies (job board / aggregator)</label>
+                      </div>
+                    </div>
+                    <div id="fieldHtmlSource" class="d-none">
+                      <label class="form-label fw-semibold small">Paste HTML source</label>
+                      <textarea id="scrapeHtml" class="form-control form-control-sm font-monospace" rows="6"
+                                placeholder="Paste raw HTML here to skip web fetching"
+                                oninput="updateUrlRequirement()"></textarea>
+                    </div>
+                  </div>
+                </details>
+                <button class="btn btn-outline-primary" id="fetchBtn" onclick="fetchCategories()">
+                  <span id="fetchSpinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
+                  <span id="fetchBtnLabel">Fetch Jobs</span>
+                </button>
+                <p id="fetchError" class="text-danger small mt-2 mb-0 d-none"></p>
+              </div>
+
+              <div id="scrapeStep2" class="d-none">
+                <hr class="my-4">
+                <div class="d-flex align-items-baseline justify-content-between mb-2">
+                  <p class="fw-semibold mb-0">Select jobs to scrape:</p>
+                  <span class="text-muted small" id="scrapeJobCount"></span>
+                </div>
+                <div id="jobList" class="mb-3"></div>
+                <div class="d-flex gap-2 mb-4">
+                  <button class="btn btn-sm btn-outline-secondary" onclick="selectAll(true)">All</button>
+                  <button class="btn btn-sm btn-outline-secondary" onclick="selectAll(false)">None</button>
+                </div>
+                <button class="btn btn-primary" onclick="startScrape()">Go</button>
+                <button class="btn btn-outline-secondary ms-2" onclick="resetScraper()">Back</button>
+              </div>
+
+              <div id="scrapeStep3" class="d-none">
+                <hr class="my-4">
+                <div class="d-flex justify-content-between align-items-baseline mb-1">
+                  <span class="fw-semibold" id="scrapeProgressLabel">Scraping…</span>
+                  <span class="text-muted small" id="scrapeCounts"></span>
+                </div>
+                <div class="progress mb-2" style="height:.4rem;border-radius:1rem">
+                  <div id="scrapeBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width:0%;border-radius:1rem"></div>
+                </div>
+                <div class="d-flex align-items-center gap-3 mb-3">
+                  <p class="text-muted small mb-0" id="scrapeCurrentTitle"></p>
+                  <button class="btn btn-sm btn-outline-danger ms-auto d-none" id="cancelScrape" onclick="cancelScrape()">Cancel</button>
+                </div>
+                <div id="scrapeLog" class="font-monospace small border rounded p-2 bg-light" style="max-height:180px;overflow-y:auto"></div>
+                <div id="scrapeViewCompany" class="mt-2 d-none"></div>
+              </div>
+            </div>{# end tab-scrape #}
+          </div>{# end tab-content #}
+
+          <datalist id="company-datalist">
+            {% for c in existing_companies %}<option value="{{ c }}">{% endfor %}
+          </datalist>
+        </div>{# end modal-body #}
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const JOBS_BASE = "{% url 'jobs_index' %}";
+
+    function getCsrfToken() {
+      return document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] || '';
+    }
+
+    document.getElementById('addJobsModal').addEventListener('shown.bs.modal', () => {
+      updateBoardFields();
+    });
+
+    ['urlForm', 'fileForm', 'textForm'].forEach(id => {
+      const form = document.getElementById(id);
+      if (!form) return;
+      form.addEventListener('submit', () => {
+        const btn = form.querySelector('button[type=submit]');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing…';
+      });
+    });
+
+    let _baseUrl = '';
+    let _allJobs = [];
+    let _es = null;
+
+    function updateBoardFields() {
+      const board = document.getElementById('scrapeBoard').value;
+      document.getElementById('fieldLeverSlug').classList.toggle('d-none', board !== 'lever');
+      document.getElementById('fieldGeneric').classList.toggle('d-none', board !== 'generic');
+      document.getElementById('fieldHtmlSource').classList.toggle('d-none', board !== 'generic');
+      document.getElementById('fieldMultiCompany').classList.toggle('d-none', board !== 'generic');
+    }
+
+    async function fetchCategories() {
+      const board   = document.getElementById('scrapeBoard').value;
+      const spinner = document.getElementById('fetchSpinner');
+      const errEl   = document.getElementById('fetchError');
+      errEl.classList.add('d-none');
+      let payload = {board};
+      if (board === 'lever') {
+        const company = document.getElementById('scrapeCompany').value.trim();
+        if (!company) { errEl.textContent = 'Enter a company slug.'; errEl.classList.remove('d-none'); return; }
+        payload.company = company;
+      } else {
+        const url     = document.getElementById('scrapeUrl').value.trim();
+        const company = document.getElementById('scrapeCompanyName').value.trim();
+        const htmlSrc = document.getElementById('scrapeHtml')?.value.trim() || '';
+        if (!url && !htmlSrc) { errEl.textContent = 'Enter the careers page URL or paste HTML source.'; errEl.classList.remove('d-none'); return; }
+        payload.url = url; payload.company = company; payload.html_src = htmlSrc;
+        payload.multi_company = document.getElementById('scrapeMultiCompany').checked;
+      }
+      document.getElementById('scrapeStep2').classList.add('d-none');
+      document.getElementById('jobList').innerHTML = '';
+      const btn = document.getElementById('fetchBtn');
+      btn.disabled = true;
+      document.getElementById('fetchBtnLabel').textContent = 'Fetching…';
+      spinner.classList.remove('d-none');
+      try {
+        const resp = await fetch(JOBS_BASE + 'add-jobs/scrape/categories/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        spinner.classList.add('d-none'); btn.disabled = false;
+        document.getElementById('fetchBtnLabel').textContent = 'Fetch Jobs';
+        if (data.error) { errEl.textContent = data.error; errEl.classList.remove('d-none'); return; }
+        _baseUrl = data.base_url; _allJobs = data.jobs || [];
+        renderJobs(_allJobs);
+        document.getElementById('scrapeStep2').classList.remove('d-none');
+      } catch (e) {
+        spinner.classList.add('d-none'); btn.disabled = false;
+        document.getElementById('fetchBtnLabel').textContent = 'Fetch Jobs';
+        errEl.textContent = 'Request failed: ' + e.message; errEl.classList.remove('d-none');
+      }
+    }
+
+    function renderJobs(jobs) {
+      const el = document.getElementById('jobList');
+      if (!jobs.length) {
+        el.innerHTML = '<span class="text-muted small">No jobs found.</span>';
+        document.getElementById('scrapeJobCount').textContent = ''; return;
+      }
+      const uniqueCompanies = new Set(jobs.map(j => j.company || '').filter(Boolean));
+      const byCompany = uniqueCompanies.size > 1;
+      const groupKey  = byCompany ? j => j.company || 'Unknown' : j => j.category || 'General';
+      const groups = {}; const order = [];
+      for (const job of jobs) {
+        const key = groupKey(job);
+        if (!groups[key]) { groups[key] = []; order.push(key); }
+        groups[key].push(job);
+      }
+      const groupLabel = byCompany ? 'compan' : 'categor';
+      document.getElementById('scrapeJobCount').textContent =
+        `${jobs.length} job${jobs.length !== 1 ? 's' : ''} · ${order.length} ${groupLabel}${order.length !== 1 ? 'ies' : 'y'}`;
+      el.innerHTML = order.map((key, ci) => {
+        const catId = `cat-${ci}`;
+        const rows = groups[key].map((job, ji) => {
+          const jobId = `job-${ci}-${ji}`;
+          const safeTitle = job.title.replace(/"/g, '&quot;');
+          const safeUrl   = job.url.replace(/"/g, '&quot;');
+          const safeCompany = (job.company || '').replace(/"/g, '&quot;');
+          const alreadyIn = !!job.exists;
+          return `<div class="d-flex align-items-center ps-4 py-1 border-bottom border-light${alreadyIn ? ' bg-light' : ''}">
+            <input class="form-check-input job-check flex-shrink-0 me-2" type="checkbox"
+                   data-cat="${ci}" value="${safeUrl}" data-title="${safeTitle}" data-company="${safeCompany}"
+                   id="${jobId}" ${alreadyIn ? '' : 'checked'} onchange="updateCatToggle(${ci})">
+            <label class="form-check-label small text-truncate${alreadyIn ? ' text-muted' : ''}" for="${jobId}" style="max-width:100%"
+                   title="${safeTitle}">${job.title}${alreadyIn ? ' <span class="badge bg-secondary ms-1" style="font-size:.65em">already imported</span>' : ''}</label>
+          </div>`;
+        }).join('');
+        return `<div class="border rounded mb-2 overflow-hidden">
+          <div class="d-flex align-items-center px-3 py-2 bg-light">
+            <input class="form-check-input flex-shrink-0 me-2 cat-toggle" type="checkbox"
+                   id="${catId}" data-ci="${ci}" checked onchange="toggleCategory(this)">
+            <label class="form-check-label fw-semibold small mb-0 me-2" for="${catId}">${key}</label>
+            <span class="badge bg-secondary ms-auto" style="font-weight:400">${groups[key].length}</span>
+          </div>${rows}</div>`;
+      }).join('');
+    }
+
+    function toggleCategory(catCb) {
+      const ci = catCb.dataset.ci; catCb.indeterminate = false;
+      document.querySelectorAll(`.job-check[data-cat="${ci}"]`).forEach(cb => cb.checked = catCb.checked);
+    }
+
+    function updateCatToggle(ci) {
+      const jobs = [...document.querySelectorAll(`.job-check[data-cat="${ci}"]`)];
+      const checked = jobs.filter(cb => cb.checked).length;
+      const catCb = document.querySelector(`.cat-toggle[data-ci="${ci}"]`);
+      catCb.checked = checked > 0; catCb.indeterminate = checked > 0 && checked < jobs.length;
+    }
+
+    function selectAll(checked) {
+      document.querySelectorAll('.job-check').forEach(cb => cb.checked = checked);
+      document.querySelectorAll('.cat-toggle').forEach(cb => { cb.checked = checked; cb.indeterminate = false; });
+    }
+
+    function resetScraper() {
+      document.getElementById('scrapeStep2').classList.add('d-none');
+      document.getElementById('scrapeStep3').classList.add('d-none');
+    }
+
+    async function startScrape() {
+      const board   = document.getElementById('scrapeBoard').value;
+      const company = board === 'lever'
+        ? document.getElementById('scrapeCompany').value.trim()
+        : document.getElementById('scrapeCompanyName').value.trim();
+      const limit          = parseInt(document.getElementById('scrapeLimit').value) || null;
+      const timeout        = parseInt(document.getElementById('scrapeTimeout').value) || 30;
+      const openai_timeout = parseInt(document.getElementById('scrapeOpenaiTimeout').value) || 120;
+      const multi_company  = document.getElementById('scrapeMultiCompany').checked;
+      const jobs = [...document.querySelectorAll('.job-check:checked')].map(cb => ({
+        url: cb.value, title: cb.dataset.title, company: cb.dataset.company || '',
+      }));
+      await fetch(JOBS_BASE + 'add-jobs/scrape/confirm/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({board, company, base_url: _baseUrl, jobs, limit, timeout, openai_timeout, multi_company}),
+      });
+      document.getElementById('scrapeStep2').classList.add('d-none');
+      document.getElementById('scrapeStep3').classList.remove('d-none');
+      document.getElementById('scrapeBar').style.width = '0%';
+      document.getElementById('scrapeProgressLabel').textContent = 'Scraping…';
+      document.getElementById('scrapeCounts').textContent = '';
+      document.getElementById('scrapeCurrentTitle').textContent = '';
+      document.getElementById('scrapeViewCompany').classList.add('d-none');
+      const log = document.getElementById('scrapeLog');
+      const pad = String(jobs.length).length;
+      log.innerHTML = '';
+      jobs.forEach((job, i) => {
+        const line = document.createElement('div');
+        line.id = `log-line-${i + 1}`; line.className = 'text-muted';
+        line.textContent = `[${String(i + 1).padStart(pad)}/${jobs.length}] ${job.title}`;
+        log.appendChild(line);
+      });
+      log.scrollTop = 0;
+      _es = new EventSource(JOBS_BASE + 'add-jobs/scrape/stream/');
+      document.getElementById('cancelScrape').classList.remove('d-none');
+      function finishScrape() {
+        _es.close(); document.getElementById('cancelScrape').classList.add('d-none');
+        document.getElementById('scrapeBar').classList.remove('progress-bar-animated', 'progress-bar-striped');
+      }
+      _es.onmessage = e => {
+        const d = JSON.parse(e.data);
+        const pad2 = String(d.total).length;
+        if (d.done) {
+          finishScrape();
+          document.getElementById('scrapeBar').style.width = '100%';
+          document.getElementById('scrapeCounts').textContent = '';
+          document.getElementById('scrapeCurrentTitle').textContent = '';
+          document.getElementById('scrapeProgressLabel').textContent = `Done — ${d.total} job${d.total !== 1 ? 's' : ''} scraped.`;
+          if (d.company) {
+            const vc = document.getElementById('scrapeViewCompany');
+            vc.innerHTML = `<a href="${JOBS_BASE}${d.company}/" class="btn btn-sm btn-success">View company</a>`;
+            vc.classList.remove('d-none');
+          }
+          return;
+        }
+        if (d.starting) {
+          const pct = d.total ? Math.round(((d.current - 0.5) / d.total) * 100) : 0;
+          document.getElementById('scrapeBar').style.width = pct + '%';
+          document.getElementById('scrapeCounts').textContent = `${d.current} / ${d.total}`;
+          document.getElementById('scrapeCurrentTitle').textContent = d.title || d.url || '';
+          const line = document.getElementById(`log-line-${d.current}`);
+          if (line) { line.className = 'text-primary'; line.textContent = `[${String(d.current).padStart(pad2)}/${d.total}] ⟳ ${d.title || d.url}`; line.scrollIntoView({block: 'nearest'}); }
+          return;
+        }
+        const pct = d.total ? Math.round((d.current / d.total) * 100) : 0;
+        document.getElementById('scrapeBar').style.width = pct + '%';
+        document.getElementById('scrapeCounts').textContent = `${d.current} / ${d.total}`;
+        document.getElementById('scrapeCurrentTitle').textContent = d.title || d.url || '';
+        const line = document.getElementById(`log-line-${d.current}`);
+        if (line) {
+          line.className = d.error ? 'text-danger' : 'text-success';
+          line.textContent = `[${String(d.current).padStart(pad2)}/${d.total}] ${d.title || d.url}${d.error ? ' — ' + d.error : ''}`;
+          line.scrollIntoView({block: 'nearest'});
+        }
+      };
+      _es.onerror = () => finishScrape();
+    }
+
+    function cancelScrape() {
+      if (_es) _es.close();
+      document.getElementById('cancelScrape').classList.add('d-none');
+      document.getElementById('scrapeBar').classList.remove('progress-bar-animated', 'progress-bar-striped');
+      document.getElementById('scrapeProgressLabel').textContent = 'Cancelled.';
+      document.getElementById('scrapeCounts').textContent = '';
+      document.getElementById('scrapeCurrentTitle').textContent = '';
+    }
+
+    document.getElementById('notesModal').addEventListener('hidden.bs.modal', () => {
+      const ta = document.querySelector('#notesModal textarea');
+      ta.value = ta.defaultValue;
+    });
+
+    const _modalParam = new URLSearchParams(location.search).get('modal');
+    function _openModalInstant(el) {
+      el.classList.remove('fade');
+      bootstrap.Modal.getOrCreateInstance(el).show();
+      el.addEventListener('shown.bs.modal', () => el.classList.add('fade'), {once: true});
+    }
+    if (_modalParam === 'add-jobs') {
+      _openModalInstant(document.getElementById('addJobsModal'));
+      history.replaceState(null, '', location.pathname);
+    } else if (_modalParam === 'cv') {
+      _openModalInstant(document.getElementById('cvModal'));
+      history.replaceState(null, '', location.pathname);
+    }
+
+    document.querySelectorAll('form[action*="/score/"]').forEach(form => {
+      if (form.dataset.stream) return;
+      form.addEventListener('submit', () => {
+        document.getElementById('scoring-overlay').classList.add('active');
+      });
+    });
+
+    function scoreAll(company) {
+      const overlay   = document.getElementById('scoring-overlay');
+      const spinner   = document.getElementById('overlay-spinner');
+      const progress  = document.getElementById('overlay-progress');
+      const singleLbl = document.getElementById('overlay-single-label');
+      const bar       = document.getElementById('overlay-bar');
+      const label     = document.getElementById('overlay-label');
+      const sub       = document.getElementById('overlay-sub');
+      spinner.style.display = 'none'; singleLbl.style.display = 'none'; progress.style.display = 'block';
+      overlay.classList.add('active');
+      const es = new EventSource(`${JOBS_BASE}score/${company}/stream/`);
+      es.onmessage = e => {
+        const d = JSON.parse(e.data);
+        if (d.done) { es.close(); window.location.reload(); return; }
+        const pct = Math.round((d.current / d.total) * 100);
+        bar.style.width = pct + '%';
+        if (d.retry) {
+          label.textContent = `Retrying ${d.current} of ${d.total} (attempt ${d.retry + 1}/3)…`;
+          sub.textContent = d.title; sub.style.color = '#ffc107';
+        } else if (d.failed) {
+          label.textContent = `Failed ${d.current} of ${d.total} — skipping`;
+          sub.textContent = d.title; sub.style.color = '#f87171';
+        } else {
+          label.textContent = `Scoring ${d.current} of ${d.total}…`;
+          sub.textContent = d.title; sub.style.color = '';
+        }
+      };
+      es.onerror = () => { es.close(); window.location.reload(); };
+    }
+  </script>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

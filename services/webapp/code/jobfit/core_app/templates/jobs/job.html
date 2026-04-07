@@ -1,0 +1,230 @@
+{% extends "base_jobs.html" %}
+{% load jobs_tags %}
+{% block title %}JobFit — {{ job.title }} — {{ job.company }}{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'jobs_index' %}">Companies</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'jobs_company' company %}">{{ job.company|default:company }}</a></li>
+    <li class="breadcrumb-item active">{{ job.title }}</li>
+  </ol>
+</nav>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-body pb-3">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <h2 class="mb-1">{{ job.title|default:"—" }}</h2>
+        <div class="text-muted fs-6 mb-3">{{ job.company }}</div>
+        <div class="d-flex flex-wrap gap-2">
+          {% if job.location %}<span class="badge badge-loc px-3 py-2">&#128205; {{ job.location }}</span>{% endif %}
+          {% if job.employment_type %}<span class="badge badge-type px-3 py-2">{{ job.employment_type }}</span>{% endif %}
+          {% if job.experience_level and job.experience_level != 'unspecified' %}
+          <span class="badge badge-level px-3 py-2">{{ job.experience_level }}</span>
+          {% endif %}
+          {% if job.salary and job.salary != 'null' %}<span class="badge bg-light text-dark border px-3 py-2">&#128176; {{ job.salary }}</span>{% endif %}
+          <span class="badge badge-date px-3 py-2">{{ job.added_at|datefmt }}</span>
+        </div>
+      </div>
+      <div class="d-flex gap-2 ms-3 flex-shrink-0 align-items-start flex-wrap">
+        <form action="{% url 'jobs_score_one' company job.role_id %}" method="post" class="m-0">
+          {% csrf_token %}
+          <button class="btn btn-outline-primary" {% if not can_score %}disabled{% endif %}
+                  title="{% if not has_openai_key %}Requires OpenAI key{% elif not cv_uploaded %}Upload a CV to enable scoring{% endif %}">
+            {% if job.score %}Re-score vs CV{% else %}Score vs CV{% endif %}
+          </button>
+        </form>
+        {% if job.has_pdf %}
+        <a href="{% url 'jobs_job_pdf' company job.role_id %}" target="_blank" class="btn btn-outline-secondary">&#128196; PDF</a>
+        {% endif %}
+        {% if job.url %}
+        <a href="{{ job.url }}" target="_blank" class="btn btn-outline-secondary">&#127760; Source</a>
+        {% endif %}
+        {% if job.archived %}
+        <form action="{% url 'jobs_unarchive_job' company job.role_id %}" method="post" class="m-0">
+          {% csrf_token %}
+          <button class="btn btn-warning">Unarchive</button>
+        </form>
+        {% else %}
+        <form action="{% url 'jobs_archive_job' company job.role_id %}" method="post" class="m-0">
+          {% csrf_token %}
+          <button class="btn btn-outline-secondary">Archive</button>
+        </form>
+        {% endif %}
+        <form action="{% url 'jobs_delete' company job.role_id %}" method="post" class="m-0">
+          {% csrf_token %}
+          <button class="btn btn-outline-danger" onclick="return confirm('Remove this job?')">&#128465; Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-8">
+
+    {% if job.summary %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Summary</div>
+        <p class="mb-0 small">{{ job.summary }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if job.description %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">About the Role</div>
+        <p class="mb-0 small">{{ job.description }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if job.responsibilities %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Responsibilities</div>
+        <ul class="mb-0 ps-3">
+          {% for item in job.responsibilities %}
+          <li class="mb-1 small">{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if job.requirements %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Requirements</div>
+        <ul class="mb-0 ps-3">
+          {% for item in job.requirements %}
+          <li class="mb-1 small">{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if job.nice_to_have %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Nice to Have</div>
+        <ul class="mb-0 ps-3">
+          {% for item in job.nice_to_have %}
+          <li class="mb-1 small">{{ item }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+  <div class="col-lg-4">
+
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">CV Match</div>
+        {% if job.score %}
+          <div class="d-flex align-items-center gap-2 mb-1">
+            {% score_badge job.score "fs-5 px-3 py-2" %}
+            <div>
+              <div class="d-flex align-items-center gap-2">
+                <span class="text-muted small">out of 10</span>
+                {% if job.score.mode == 'brutal' %}
+                <span class="badge bg-danger" style="font-size:.65rem;">brutal</span>
+                {% endif %}
+                <a href="{% url 'jobs_help' %}" class="text-decoration-none" title="How is this score calculated?"
+                   style="display:inline-flex;align-items:center;justify-content:center;width:1.1rem;height:1.1rem;border-radius:50%;border:1.5px solid #adb5bd;color:#adb5bd;font-size:.65rem;font-weight:700;line-height:1;">?</a>
+              </div>
+              {% if job.score.cv_hash or job.score_delta is not None %}
+              <div class="small text-muted">
+                {% if job.score.cv_hash %}with <a href="{% url 'jobs_cv_view_specific' job.score.cv_hash %}" target="_blank" class="text-muted text-decoration-underline">this CV</a>{% endif %}
+                {% if job.score_delta is not None %}
+                (<span class="fw-semibold {% if job.score_delta > 0 %}text-success{% elif job.score_delta < 0 %}text-danger{% else %}text-muted{% endif %}">{% if job.score_delta >= 0 %}+{% endif %}{{ job.score_delta }}</span>
+                with <a href="#" class="text-muted text-decoration-underline" data-bs-toggle="modal" data-bs-target="#notesUsedModal">notes</a>)
+                {% endif %}
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          <p class="small mb-3">{{ job.score.reasoning }}</p>
+          {% if job.score.strengths %}
+          <div class="section-title">Strengths</div>
+          <ul class="mb-3 ps-3">
+            {% for s in job.score.strengths %}
+            <li class="small text-success mb-1">{{ s }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% if job.score.gaps %}
+          <div class="section-title">Gaps</div>
+          <ul class="mb-0 ps-3">
+            {% for g in job.score.gaps %}
+            <li class="small text-danger mb-1">{{ g }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        {% else %}
+          <div class="d-flex align-items-center gap-2 mb-2">
+            {% score_badge None "fs-5 px-3 py-2" %}
+            <span class="text-muted small">not scored yet</span>
+          </div>
+          <p class="small text-muted mb-0">
+            {% if not cv_uploaded %}Upload your CV to score this role.
+            {% else %}Click "Score vs CV" to analyse this role against your CV.{% endif %}
+          </p>
+        {% endif %}
+
+        {% if job.all_scores %}
+        <div class="border-top mt-3 pt-3">
+          <div class="section-title mb-2">All scores</div>
+          <div class="d-flex flex-column gap-1">
+            {% for s in job.all_scores %}
+            {% if s.score >= 9 %}
+              <div class="d-flex align-items-center gap-2 small">
+                <span class="badge score-high">{{ s.score }}/10</span>
+            {% elif s.score >= 5 %}
+              <div class="d-flex align-items-center gap-2 small">
+                <span class="badge score-mid">{{ s.score }}/10</span>
+            {% else %}
+              <div class="d-flex align-items-center gap-2 small">
+                <span class="badge score-low">{{ s.score }}/10</span>
+            {% endif %}
+              <a href="{% url 'jobs_cv_view_specific' s.cv_hash %}" target="_blank" class="text-truncate text-decoration-none text-dark" style="max-width:9rem" title="{{ s.cv_name }}">{{ s.cv_name }}</a>
+              {% if s.mode == 'brutal' %}<span class="badge bg-danger" style="font-size:.6rem">brutal</span>{% endif %}
+              {% if s.use_notes %}<span class="text-muted" style="font-size:.7rem">w/notes</span>{% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="modal fade" id="notesUsedModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:#f8f9fa;border-radius:.375rem .375rem 0 0">
+        <h5 class="modal-title">&#128221; Notes used for this score</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        {% if job.score and job.score.notes_used %}
+        <pre class="mb-0 small">{{ job.score.notes_used }}</pre>
+        {% else %}
+        <p class="text-muted mb-0">Notes used for this scoring are not available.</p>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

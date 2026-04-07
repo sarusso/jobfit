@@ -25,7 +25,7 @@ ONGOING_SIGNUPS = {}
 @public_view
 def home(request):
     if request.user.is_authenticated:
-        return HttpResponseRedirect('/postlogin/')
+        return HttpResponseRedirect('/jobs/')
     data = {'user': request.user}
     return render(request, 'home.html', {'data': data})
 
@@ -204,11 +204,11 @@ def postlogin(request):
             if needs_privacy:
                 profile.last_accepted_privacy = settings.PRIVACY_VERSION
             profile.save()
-            return HttpResponseRedirect('/account/')
+            return HttpResponseRedirect('/jobs/')
         data = {'action': 'accept_terms'}
         return render(request, 'postlogin.html', {'data': data})
 
-    return HttpResponseRedirect('/account/')
+    return HttpResponseRedirect('/jobs/')
 
 
 #=========================

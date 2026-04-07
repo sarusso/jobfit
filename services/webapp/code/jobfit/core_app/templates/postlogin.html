@@ -1,25 +1,22 @@
-{% load static %}
-{% include "header.html" %}
-{% include "navigation.html" %}
-                <br/>
-                <div class="row">
-                    <div class="col-md-6 offset-md-3">
-                        <div class="card">
-                            <div class="card-body">
-                                <h1>Welcome</h1>
-                                <hr>
-                                {% if data.action == "accept_terms" %}
-                                <h3>Updated Terms of Service</h3>
-                                <p>Our Terms of Service and/or Privacy Policy have been updated since your last visit. Please review them before continuing:</p>
-                                <p><a href="/terms/" target="_blank">Terms of Service</a> &nbsp;|&nbsp; <a href="/privacy/" target="_blank">Privacy Policy</a></p>
-                                <p style="margin-top:20px; text-align:center">
-                                    <a href="?accepted=True" class="btn btn-success">I've reviewed them, continue</a>
-                                </p>
-                                {% else %}
-                                <p style="text-align:center"><a href="/account/">Go to your account</a></p>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-{% include "footer.html" %}
+{% extends "base_simple.html" %}
+{% block title %}JobFit — Welcome{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-body p-4 text-center">
+        <h2 class="mb-4">Welcome</h2>
+        {% if data.action == "accept_terms" %}
+        <h5 class="mb-3">Updated Terms of Service</h5>
+        <p class="text-muted">Our Terms of Service and/or Privacy Policy have been updated since your last visit. Please review them before continuing:</p>
+        <p><a href="/terms/" target="_blank">Terms of Service</a> &nbsp;|&nbsp; <a href="/privacy/" target="_blank">Privacy Policy</a></p>
+        <a href="?accepted=True" class="btn btn-success mt-3">I've reviewed them, continue</a>
+        {% else %}
+        <p><a href="/jobs/" class="btn btn-success">Go to Jobs</a></p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

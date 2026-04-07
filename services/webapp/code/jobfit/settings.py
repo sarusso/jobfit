@@ -41,6 +41,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'jobfit.core_app.context_processors.jobs_context',
             ],
         },
     },
@@ -82,6 +83,10 @@ STATIC_ROOT = '/jobfit/static'
 MAIN_DOMAIN_NAME = os.environ.get('MAIN_DOMAIN_NAME', 'http://localhost')
 CONTACT_EMAIL    = os.environ.get('CONTACT_EMAIL', 'contact@jobfit.app')
 INVITATION_CODE  = os.environ.get('INVITATION_CODE', None)
+
+# Jobs app settings
+DATA_DIR   = os.environ.get('DATA_DIR',   os.path.join(BASE_DIR, '../../data'))
+OPENAI_KEY = os.environ.get('OPENAI_KEY', None)
 
 try:
     TERMS_VERSION = float(os.environ.get('TERMS_VERSION', 1.0))

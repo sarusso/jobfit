@@ -1,0 +1,60 @@
+{% extends "base_jobs.html" %}
+{% block title %}JobFit — Help{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+<div class="col-lg-8">
+
+<h2 class="mb-4">Help</h2>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-bold">CV Match Scoring</div>
+  <div class="card-body">
+    <p>When a CV is uploaded and <code>OPENAI_KEY</code> is configured, each job description can be scored against your CV using <strong>GPT-4o</strong>. Scores are <em>absolute</em> — they reflect fit against the role independently, not relative to other jobs.</p>
+    <p>Two scoring modes are available via the <strong>Brutal mode</strong> toggle in the navbar. Each mode has its own cached score per job, so switching modes never overwrites the other. Scores are invalidated automatically when you upload a new CV.</p>
+    <p><strong>Score all vs CV</strong> on the company page only scores jobs that are <em>missing</em> a score for the current mode. Use the per-job <em>Re-score</em> button to force a fresh score.</p>
+
+    <div class="section-title">Score rubric</div>
+    <table class="table table-bordered table-sm align-middle">
+      <thead class="table-light">
+        <tr>
+          <th style="width:5rem">Score</th>
+          <th>Meaning</th>
+          <th style="width:8rem" class="text-center">Shortlist?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge score-high fs-6 px-2">10</span></td><td>Near-perfect fit. Candidate exceeds all requirements. Very likely to receive an offer.</td><td class="text-center text-success fw-bold">&#10003; Yes</td></tr>
+        <tr><td><span class="badge score-high fs-6 px-2">9</span></td><td>Excellent fit. Meets all key requirements, only minor gaps.</td><td class="text-center text-success fw-bold">&#10003; Yes</td></tr>
+        <tr><td><span class="badge score-mid fs-6 px-2">8</span></td><td>Strong fit. Meets most requirements; gaps are small and easily bridgeable.</td><td class="text-center text-warning fw-bold">~ Likely</td></tr>
+        <tr><td><span class="badge score-mid fs-6 px-2">7</span></td><td>Good fit. Meets core requirements but has some notable gaps.</td><td class="text-center text-warning fw-bold">~ Likely</td></tr>
+        <tr><td><span class="badge score-mid fs-6 px-2">6</span></td><td>Borderline positive. Could make the shortlist but not a standout candidate.</td><td class="text-center text-warning fw-bold">~ Maybe</td></tr>
+        <tr><td><span class="badge score-mid fs-6 px-2">5</span></td><td>Borderline negative. As likely to make the shortlist as not.</td><td class="text-center text-warning fw-bold">~ Maybe</td></tr>
+        <tr><td><span class="badge score-low fs-6 px-2">4</span></td><td>Below average. Significant gaps in key requirements.</td><td class="text-center text-danger fw-bold">&#10007; Unlikely</td></tr>
+        <tr><td><span class="badge score-low fs-6 px-2">3</span></td><td>Poor fit. Missing several critical requirements.</td><td class="text-center text-danger fw-bold">&#10007; Unlikely</td></tr>
+        <tr><td><span class="badge score-low fs-6 px-2">2</span></td><td>Very poor fit. Fundamental mismatch.</td><td class="text-center text-danger fw-bold">&#10007; No</td></tr>
+        <tr><td><span class="badge score-low fs-6 px-2">1</span></td><td>No meaningful match.</td><td class="text-center text-danger fw-bold">&#10007; No</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-bold">Setup</div>
+  <div class="card-body">
+    <dl class="mb-0">
+      <dt>OpenAI Key</dt>
+      <dd class="mb-3">Set the <code>OPENAI_KEY</code> environment variable to enable scoring and JD analysis.</dd>
+      <dt>CV</dt>
+      <dd class="mb-3">Upload your CV as a PDF using the <strong>CV</strong> button in the navbar. You can manage multiple CVs and switch between them — cached scores are stored per CV.</dd>
+      <dt>Personal Notes</dt>
+      <dd class="mb-3">Use the <strong>Notes</strong> button to add context that isn't in your CV (skills, projects, languages). Enable the <strong>w/notes</strong> toggle to include them in scoring calls.</dd>
+      <dt>Adding Jobs</dt>
+      <dd>Use the <strong>&#10010; Jobs</strong> button in the navbar to add job postings by URL, PDF/text upload, pasted text, or by scraping a job board.</dd>
+    </dl>
+  </div>
+</div>
+
+</div>
+</div>
+{% endblock %}
