@@ -14,6 +14,7 @@ import io
 import json
 import logging
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -409,6 +410,16 @@ def _load_json(path: Path) -> dict:
         return json.load(f)
 
 
+def _set_archived(path: Path, archived: bool) -> None:
+    data = _load_json(path) if path.exists() else {}
+    if archived:
+        data["archived"] = True
+    else:
+        data.pop("archived", None)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
 def _companies() -> list[dict]:
     mode = _current_mode()
     companies = []
@@ -427,7 +438,8 @@ def _companies() -> list[dict]:
         if jobs:
             info_path = company_dir / "_company.json"
             info = _load_json(info_path) if info_path.exists() else {}
-            companies.append({"name": company_dir.name, "jobs": jobs, "info": info})
+            companies.append({"name": company_dir.name, "jobs": jobs, "info": info,
+                               "archived": bool(info.get("archived"))})
     return companies
 
 
@@ -889,8 +901,35 @@ def delete_job(company: str, role_id: str):
     if scores_dir.is_dir():
         for f in scores_dir.glob(f"{role_id}_*.json"):
             f.unlink()
-    # If company folder is now empty (only _company.json / _scores left), stay on company page
+    remaining = [f for f in base.glob("*.json") if not f.name.startswith("_")]
+    if not remaining:
+        shutil.rmtree(base)
+        return redirect(url_for("index"))
     return redirect(url_for("company_view", company=company))
+
+
+@app.route("/archive/<company>", methods=["POST"])
+def archive_company(company: str):
+    _set_archived(DATA_DIR / company / "_company.json", True)
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/unarchive/<company>", methods=["POST"])
+def unarchive_company(company: str):
+    _set_archived(DATA_DIR / company / "_company.json", False)
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.route("/archive/<company>/<role_id>", methods=["POST"])
+def archive_job(company: str, role_id: str):
+    _set_archived(DATA_DIR / company / f"{role_id}.json", True)
+    return redirect(request.referrer or url_for("company_view", company=company))
+
+
+@app.route("/unarchive/<company>/<role_id>", methods=["POST"])
+def unarchive_job(company: str, role_id: str):
+    _set_archived(DATA_DIR / company / f"{role_id}.json", False)
+    return redirect(request.referrer or url_for("company_view", company=company))
 
 
 @app.route("/score/<company>/clear", methods=["POST"])

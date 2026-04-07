@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}JobFit — {{ jobs[0].company if jobs and jobs[0].company else company }}{% endblock %}
+{% block title %}JobFit — {{ company_info.company }}{% endblock %}
 
 {% block content %}
 {% from "base.html" import score_badge %}
@@ -7,13 +7,13 @@
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="/">Companies</a></li>
-    <li class="breadcrumb-item active">{{ jobs[0].company if jobs and jobs[0].company else company }}</li>
+    <li class="breadcrumb-item active">{{ company_info.company }}</li>
   </ol>
 </nav>
 
 <div class="mb-4">
   <div class="d-flex justify-content-between align-items-baseline">
-    <h2 class="mb-0">{{ jobs[0].company if jobs and jobs[0].company else company }}</h2>
+    <h2 class="mb-0">{{ company_info.company }}</h2>
     <div class="d-flex align-items-center gap-3">
       <span class="text-muted">{{ jobs | length }} role{{ 's' if jobs | length != 1 }}</span>
       <select id="sort-select" class="form-select form-select-sm" style="width:auto"
@@ -30,6 +30,15 @@
         <button class="btn btn-sm btn-outline-danger"
                 onclick="return confirm('Clear all scores for this company?')">Clear scores</button>
       </form>
+      {% if company_info.archived %}
+      <form action="/unarchive/{{ company }}" method="post" class="m-0">
+        <button class="btn btn-sm btn-warning">Unarchive company</button>
+      </form>
+      {% else %}
+      <form action="/archive/{{ company }}" method="post" class="m-0">
+        <button class="btn btn-sm btn-outline-secondary">Archive company</button>
+      </form>
+      {% endif %}
     </div>
   </div>
   {% if company_info.description %}
@@ -37,8 +46,7 @@
   {% endif %}
 </div>
 
-<div id="jobs-container">
-{% for job in jobs %}
+{% macro job_card(job) %}
 <div class="card job-card mb-3 shadow-sm position-relative"
      data-score="{{ job._score.score if job._score else -1 }}"
      data-title="{{ job.title | lower }}">
@@ -75,13 +83,24 @@
         {% endif %}
       </div>
       <div class="d-flex gap-2 flex-shrink-0 position-relative" style="z-index:1">
+        {% if not job.archived %}
         <form action="/score/{{ company }}/{{ job._role_id }}" method="post" class="m-0">
           <button class="btn btn-sm btn-outline-secondary" {{ "disabled" if not can_score }}
                   title="{{ 'Requires OpenAI key' if not has_openai_key else ('Upload a CV to enable scoring' if not cv_uploaded) }}">{{ "Re-score" if job._score else "Score" }}</button>
         </form>
+        {% endif %}
         {% if job._has_pdf %}
         <a href="/{{ company }}/{{ job._role_id }}/pdf" target="_blank"
            class="btn btn-sm btn-outline-secondary">PDF</a>
+        {% endif %}
+        {% if job.archived %}
+        <form action="/unarchive/{{ company }}/{{ job._role_id }}" method="post" class="m-0">
+          <button class="btn btn-sm btn-warning">Unarchive</button>
+        </form>
+        {% else %}
+        <form action="/archive/{{ company }}/{{ job._role_id }}" method="post" class="m-0">
+          <button class="btn btn-sm btn-outline-secondary">Archive</button>
+        </form>
         {% endif %}
         <form action="/delete/{{ company }}/{{ job._role_id }}" method="post" class="m-0">
           <button class="btn btn-sm btn-outline-danger"
@@ -91,9 +110,24 @@
     </div>
   </div>
 </div>
+{% endmacro %}
+
+{% set active_jobs   = jobs | rejectattr("archived") | list %}
+{% set archived_jobs = jobs | selectattr("archived")  | list %}
+
+<div id="jobs-container">
+{% for job in active_jobs %}
+  {{ job_card(job) }}
 {% else %}
-<div class="alert alert-info">No jobs found for this company.</div>
+<div class="alert alert-info">No active jobs for this company.</div>
 {% endfor %}
+
+{% if archived_jobs %}
+<h6 class="text-muted mt-4 mb-3 border-bottom pb-2">Archived</h6>
+{% for job in archived_jobs %}
+  {{ job_card(job) }}
+{% endfor %}
+{% endif %}
 </div>
 
 <script>
