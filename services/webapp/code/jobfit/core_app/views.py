@@ -52,7 +52,9 @@ def user_login(request):
                     username = user.username
                 except User.DoesNotExist:
                     if password:
-                        raise ErrorMessage('Check email and password')
+                        data['error'] = 'Check email and password'
+                        data['email'] = request.POST.get('username', '')
+                        return render(request, 'login.html', {'data': data})
                     else:
                         data['success'] = 'If we have your address on file you will receive a login link shortly.'
                         return render(request, 'login.html', {'data': data})
@@ -63,7 +65,9 @@ def user_login(request):
                     login(request, user)
                     return HttpResponseRedirect('/postlogin/')
                 else:
-                    raise ErrorMessage('Check email and password')
+                    data['error'] = 'Check email and password'
+                    data['email'] = request.POST.get('username', '')
+                    return render(request, 'login.html', {'data': data})
             else:
                 # Passwordless login via email token
                 try:
