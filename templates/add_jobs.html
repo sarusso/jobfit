@@ -69,9 +69,13 @@
           <input type="text" name="company" class="form-control" list="company-datalist"
                  placeholder="auto-detect" autocomplete="off">
         </div>
-        <div class="mb-4">
+        <div class="mb-3">
           <label class="form-label fw-semibold">Upload file <span class="fw-normal text-muted small">(PDF or TXT)</span></label>
           <input type="file" name="jd_pdf" class="form-control" accept=".pdf,.txt">
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Job posting URL <span class="fw-normal text-muted small">(optional)</span></label>
+          <input type="url" name="jd_url" class="form-control" placeholder="https://…">
         </div>
         <button type="submit" class="btn btn-primary" id="fileSubmit" {{ "disabled" if not has_openai_key }}>
           Add job
@@ -88,10 +92,14 @@
           <input type="text" name="company" class="form-control" list="company-datalist"
                  placeholder="auto-detect" autocomplete="off">
         </div>
-        <div class="mb-4">
+        <div class="mb-3">
           <label class="form-label fw-semibold">Job description</label>
           <textarea name="text" class="form-control font-monospace" rows="10"
                     placeholder="Paste the full job description here…" required></textarea>
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold">Job posting URL <span class="fw-normal text-muted small">(optional)</span></label>
+          <input type="url" name="jd_url" class="form-control" placeholder="https://…">
         </div>
         <button type="submit" class="btn btn-primary" id="textSubmit" {{ "disabled" if not has_openai_key }}>
           Add job

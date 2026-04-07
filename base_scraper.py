@@ -164,22 +164,25 @@ class BaseScraper(ABC):
         )
         return json.loads(response.choices[0].message.content)
 
-    def _save(self, url: str, pdf_src: Path, company: str, job: Optional[dict] = None) -> Path:
+    def _save(self, url: str, pdf_src: Path, company: str, job: Optional[dict] = None, company_name: Optional[str] = None) -> Path:
         """Save PDF (always) and JSON (when job is provided) to data/<company>/<role_id>.*
-        Also writes data/<company>/_company.json on first analysis if not already present."""
+        Also writes data/<company>/_company.json on first analysis if not already present.
+        company_name: user-supplied company name that overrides any LLM-extracted company name."""
         dest_dir = self._data_dir / company
         dest_dir.mkdir(parents=True, exist_ok=True)
         role_id = hashlib.sha256(url.encode()).hexdigest()
         shutil.copy2(pdf_src, dest_dir / f"{role_id}.pdf")
         if job is not None:
             job_data = {k: v for k, v in job.items() if k != "company_description"}
+            if company_name:
+                job_data["company"] = company_name
             with open(dest_dir / f"{role_id}.json", "w", encoding="utf-8") as f:
                 json.dump(job_data, f, indent=2, ensure_ascii=False)
             company_file = dest_dir / "_company.json"
             if not company_file.exists() and job.get("company_description"):
                 with open(company_file, "w", encoding="utf-8") as f:
                     json.dump({
-                        "company": job.get("company", company),
+                        "company": company_name or job.get("company", company),
                         "description": job["company_description"],
                     }, f, indent=2, ensure_ascii=False)
         return dest_dir
@@ -188,19 +191,21 @@ class BaseScraper(ABC):
     # Web / programmatic interface                                         #
     # ------------------------------------------------------------------ #
 
-    def setup(self, data_dir: Path, openai_client=None, timeout: int = 30, openai_timeout: int = 120) -> "BaseScraper":
+    def setup(self, data_dir: Path, openai_client=None, timeout: int = 30, openai_timeout: int = 120, multi_company: bool = False) -> "BaseScraper":
         """Configure the scraper for use as a module (instead of via CLI)."""
         self._data_dir = data_dir
         self._openai_client = openai_client
         self._timeout = timeout
         self._openai_timeout = openai_timeout
+        self._multi_company = multi_company
         return self
 
-    def scrape_iter(self, jobs: list[dict], company: Optional[str]):
+    def scrape_iter(self, jobs: list[dict], company: Optional[str], company_name: Optional[str] = None):
         """Scrape a list of jobs [{url, title?, ...}] and yield progress dicts.
 
-        company: fixed directory name for all jobs, or None to derive it from
+        company: fixed directory slug for all jobs, or None to derive it from
                  each job's extracted company name (per-job auto-detect mode).
+        company_name: user-supplied company name; overrides LLM-extracted company name when set.
         Call setup() first."""
         import re
         import tempfile
@@ -241,7 +246,7 @@ class BaseScraper(ABC):
                     else:
                         dest_company = "unknown"
                     event["company"] = dest_company
-                    self._save(url, pdf_tmp, dest_company, job)
+                    self._save(url, pdf_tmp, dest_company, job, company_name=company_name if company else None)
                     pdf_tmp.unlink(missing_ok=True)
                 except Exception as e:
                     event["error"] = str(e)

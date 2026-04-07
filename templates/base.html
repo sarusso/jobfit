@@ -312,9 +312,13 @@
                     <input type="text" name="company" class="form-control" list="company-datalist"
                            placeholder="auto-detect" autocomplete="off">
                   </div>
-                  <div class="mb-4">
+                  <div class="mb-3">
                     <label class="form-label fw-semibold">Upload file <span class="fw-normal text-muted small">(PDF or TXT)</span></label>
                     <input type="file" name="jd_pdf" class="form-control" accept=".pdf,.txt">
+                  </div>
+                  <div class="mb-4">
+                    <label class="form-label fw-semibold">Job posting URL <span class="fw-normal text-muted small">(optional)</span></label>
+                    <input type="url" name="jd_url" class="form-control" placeholder="https://…">
                   </div>
                   <button type="submit" class="btn btn-primary" id="fileSubmit" {{ "disabled" if not has_openai_key }}>
                     Add job
@@ -331,10 +335,14 @@
                     <input type="text" name="company" class="form-control" list="company-datalist"
                            placeholder="auto-detect" autocomplete="off">
                   </div>
-                  <div class="mb-4">
+                  <div class="mb-3">
                     <label class="form-label fw-semibold">Job description</label>
                     <textarea name="text" class="form-control font-monospace" rows="4"
                               placeholder="Paste the full job description here…" required></textarea>
+                  </div>
+                  <div class="mb-4">
+                    <label class="form-label fw-semibold">Job posting URL <span class="fw-normal text-muted small">(optional)</span></label>
+                    <input type="url" name="jd_url" class="form-control" placeholder="https://…">
                   </div>
                   <button type="submit" class="btn btn-primary" id="textSubmit" {{ "disabled" if not has_openai_key }}>
                     Add job
@@ -393,6 +401,12 @@
                         <div style="max-width:8rem">
                           <label class="form-label fw-semibold small">OpenAI timeout (s)</label>
                           <input type="number" id="scrapeOpenaiTimeout" class="form-control form-control-sm" placeholder="120" min="10" value="120">
+                        </div>
+                      </div>
+                      <div id="fieldMultiCompany">
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox" id="scrapeMultiCompany">
+                          <label class="form-check-label small fw-semibold" for="scrapeMultiCompany">Multiple companies (job board / aggregator)</label>
                         </div>
                       </div>
                       <div id="fieldHtmlSource" class="d-none">
@@ -488,6 +502,7 @@
       document.getElementById('fieldLeverSlug').classList.toggle('d-none', board !== 'lever');
       document.getElementById('fieldGeneric').classList.toggle('d-none', board !== 'generic');
       document.getElementById('fieldHtmlSource').classList.toggle('d-none', board !== 'generic');
+      document.getElementById('fieldMultiCompany').classList.toggle('d-none', board !== 'generic');
     }
 
     async function fetchCategories() {
@@ -506,9 +521,10 @@
         const company  = document.getElementById('scrapeCompanyName').value.trim();
         const htmlSrc  = document.getElementById('scrapeHtml')?.value.trim() || '';
         if (!url && !htmlSrc) { errEl.textContent = 'Enter the careers page URL or paste HTML source.'; errEl.classList.remove('d-none'); return; }
-        payload.url      = url;
-        payload.company  = company;
-        payload.html_src = htmlSrc;
+        payload.url           = url;
+        payload.company       = company;
+        payload.html_src      = htmlSrc;
+        payload.multi_company = document.getElementById('scrapeMultiCompany').checked;
       }
 
       document.getElementById('scrapeStep2').classList.add('d-none');
@@ -626,9 +642,10 @@
       const company = board === 'lever'
         ? document.getElementById('scrapeCompany').value.trim()
         : document.getElementById('scrapeCompanyName').value.trim();
-      const limit         = parseInt(document.getElementById('scrapeLimit').value) || null;
-      const timeout       = parseInt(document.getElementById('scrapeTimeout').value) || 30;
+      const limit          = parseInt(document.getElementById('scrapeLimit').value) || null;
+      const timeout        = parseInt(document.getElementById('scrapeTimeout').value) || 30;
       const openai_timeout = parseInt(document.getElementById('scrapeOpenaiTimeout').value) || 120;
+      const multi_company  = document.getElementById('scrapeMultiCompany').checked;
       const jobs    = [...document.querySelectorAll('.job-check:checked')].map(cb => ({
         url: cb.value, title: cb.dataset.title, company: cb.dataset.company || '',
       }));
@@ -636,7 +653,7 @@
       await fetch('/add-jobs/scrape/confirm', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({board, company, base_url: _baseUrl, jobs, limit, timeout, openai_timeout}),
+        body: JSON.stringify({board, company, base_url: _baseUrl, jobs, limit, timeout, openai_timeout, multi_company}),
       });
 
       document.getElementById('scrapeStep2').classList.add('d-none');

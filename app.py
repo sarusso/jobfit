@@ -241,6 +241,38 @@ _PROMPT_NORMAL = (
     "   1 — No meaningful match.\n\n"
 )
 
+_PROMPT_BRUTAL_STRICT = (
+    "You are a brutally honest senior recruiter with 20 years of experience. "
+    "Your reputation depends on being accurate and conservative — you never inflate scores. "
+    "Score how well the candidate's CV (attached) matches the job description below.\n\n"
+    + _PROMPT_CV_INFERENCE +
+    "ADDITIONAL RULES FOR BRUTAL MODE:\n"
+    "- Domain mismatch is a hard penalty. If the candidate's core background is in a clearly different "
+    "technical domain than the one the role requires, score 3 or below regardless of seniority or breadth.\n"
+    "- Scores of 9+ should be rare and only awarded when the candidate is a near-textbook match.\n"
+    "- When in doubt, score lower. A 6 is already a reasonable candidate. A 8 is genuinely strong.\n"
+    "- Never award a score higher than what the weakest critical requirement gap permits.\n\n"
+    "Return ONLY valid JSON with exactly these fields:\n"
+    '{\n'
+    '  "score": <integer 1-10>,\n'
+    '  "reasoning": "<2-3 sentence explanation that explicitly addresses domain fit>",\n'
+    '  "strengths": ["<item>", ...],\n'
+    '  "gaps": ["<item>", ...]\n'
+    '}\n\n'
+    "Scoring rubric:\n"
+    "  10 — Textbook fit. Candidate exceeds every requirement. Offer is almost certain.\n"
+    "   9 — Excellent fit. Meets all key requirements with negligible gaps. Very strong shortlist.\n"
+    "   8 — Strong fit. Meets most requirements; gaps are minor and quickly bridgeable.\n"
+    "   7 — Good fit. Core domain matches, but notable gaps exist. Likely shortlist.\n"
+    "   6 — Borderline. Partial domain match; missing some requirements. Maybe shortlist.\n"
+    "   5 — Weak fit. Some relevant experience but meaningful gaps. Unlikely shortlist.\n"
+    "   4 — Poor fit. Significant domain or skill gaps. Very unlikely to be shortlisted.\n"
+    "   3 — Bad fit. Missing most critical requirements or wrong domain entirely.\n"
+    "   2 — Very poor fit. Fundamental domain or seniority mismatch.\n"
+    "   1 — No meaningful match.\n\n"
+)
+
+
 _PROMPT_BRUTAL = (
     "You are a brutally honest senior recruiter with 20 years of experience. "
     "Your reputation depends on being accurate and conservative — you never inflate scores. "
@@ -249,8 +281,6 @@ _PROMPT_BRUTAL = (
     "ADDITIONAL RULES FOR BRUTAL MODE:\n"
     "- Domain mismatch is a hard penalty. If the candidate's core background is in a clearly different "
     "technical domain than the one the role requires, score 3 or below regardless of seniority or breadth.\n"
-    "- Scores of 8+ should be rare and only awarded when the candidate is a near-textbook match.\n"
-    "- When in doubt, score lower. A 6 is already a reasonable candidate. A 7 is genuinely strong.\n"
     "- Never award a score higher than what the weakest critical requirement gap permits.\n\n"
     "Return ONLY valid JSON with exactly these fields:\n"
     '{\n'
@@ -290,7 +320,7 @@ def _do_score(job: dict, client, mode: str = "normal", use_notes: bool = False) 
     )
     t0 = datetime.now()
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o", # gpt-4o gpt-5.4 gpt-5.4-mini gpt-5.4-nano
         response_format={"type": "json_object"},
         messages=[{
             "role": "user",
@@ -692,6 +722,7 @@ def add_job_url():
 def add_job_text():
     company_raw = request.form.get("company", "").strip()
     text        = request.form.get("text", "").strip()
+    url         = request.form.get("jd_url", "").strip()
 
     if not text:
         abort(400, "Job description text is required.")
@@ -700,7 +731,7 @@ def add_job_text():
     if not client:
         abort(400, "OPENAI_KEY not set in config.env.")
 
-    job_data = _analyse_jd(text, client)
+    job_data = _analyse_jd(text, client, url=url)
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
         flash("The analysis returned no job content. The pasted text may not contain a job posting.", "danger")
         ref = request.referrer or url_for("index")
@@ -741,8 +772,9 @@ def scrape_categories():
         if not client:
             return json.dumps({"error": "OPENAI_KEY is required for generic scraping."}), 400
         base_url = url or "unknown"
+        multi_company = bool(data.get("multi_company", False))
         try:
-            jobs = GenericScraper().setup(DATA_DIR, client).fetch_jobs(base_url, html_src=html_src or None)
+            jobs = GenericScraper().setup(DATA_DIR, client, multi_company=multi_company).fetch_jobs(base_url, html_src=html_src or None)
         except Exception as e:
             return json.dumps({"error": str(e)}), 500
 
@@ -764,6 +796,7 @@ def scrape_confirm():
         "jobs":           jobs,
         "timeout":        int(data.get("timeout") or 30),
         "openai_timeout": int(data.get("openai_timeout") or 120),
+        "multi_company":  bool(data.get("multi_company", False)),
     }
     session["_scrape_id"] = scrape_id
     return json.dumps({"ok": True})
@@ -781,6 +814,7 @@ def scrape_stream():
     jobs           = params.get("jobs", [])
     timeout        = params.get("timeout", 30)
     openai_timeout = params.get("openai_timeout", 120)
+    multi_company  = params.get("multi_company", False)
     client         = _openai_client()
 
     def _slugify(name: str) -> str:
@@ -803,9 +837,9 @@ def scrape_stream():
             scraper = LeverScraper().setup(DATA_DIR, client, timeout=timeout, openai_timeout=openai_timeout)
         else:
             from generic_scraper import GenericScraper
-            scraper = GenericScraper().setup(DATA_DIR, client, timeout=timeout, openai_timeout=openai_timeout)
+            scraper = GenericScraper().setup(DATA_DIR, client, timeout=timeout, openai_timeout=openai_timeout, multi_company=multi_company)
         last_company = fixed_company
-        for event in scraper.scrape_iter(jobs, fixed_company):
+        for event in scraper.scrape_iter(jobs, fixed_company, company_name=company_raw or None):
             event["total"] = total
             if event.get("company"):
                 last_company = event["company"]

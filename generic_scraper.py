@@ -75,31 +75,52 @@ class GenericScraper(BaseScraper):
 
         html = html_src if html_src else _rendered_html(base_url, timeout_ms=getattr(self, "_timeout", 30) * 1000)
 
+        multi = getattr(self, "_multi_company", False)
+
         def _make_prompt(page_url, page_html):
+            if multi:
+                intro = (
+                    "You are analyzing the HTML of a job listing page that contains postings "
+                    "from MULTIPLE different companies (e.g. a job board, aggregator, or 'who's hiring' thread)."
+                )
+                company_field = '"company": "empty string — this page has multiple companies"'
+                company_rules = (
+                    "- Leave the top-level company field as an empty string\n"
+                    "- Set the company field per job to the company that posted it\n"
+                    "- Include ALL job postings found across ALL companies"
+                )
+            else:
+                intro = (
+                    "You are analyzing the HTML of a single company's careers page. "
+                    "All job postings on this page belong to the same company."
+                )
+                company_field = '"company": "the company name as it appears on the page"'
+                company_rules = (
+                    "- Set the top-level company field to the company name\n"
+                    "- Set the company field per job to the same company name\n"
+                    "- Do NOT treat navigation links or partner links as job postings from other companies"
+                )
+
             return (
-                "You are analyzing the HTML of a page that may be a single company careers page "
-                "OR a listing page with job postings from multiple different companies "
-                "(e.g. a job board, a 'who's hiring' thread, an aggregator).\n\n"
+                f"{intro}\n\n"
                 f"Page URL: {page_url}\n\n"
                 "HTML (scripts, styles and non-essential attributes removed):\n"
                 f"{page_html}\n\n"
-                "Extract EVERY individual job posting linked anywhere on this page, across ALL companies.\n"
+                "Extract EVERY individual job posting linked on this page.\n"
                 "Return ONLY valid JSON:\n"
                 "{\n"
-                '  "company": "Single company name if the page belongs to one company, otherwise empty string",\n'
+                f'  {company_field},\n'
                 '  "categories": ["list of unique department or job category names found across all jobs"],\n'
                 '  "jobs": [\n'
-                '    {"title": "Job Title", "url": "<href value>", "category": "Department or General", "company": "Company name for this specific job"}\n'
+                '    {"title": "Job Title", "url": "<href value>", "category": "Department or General", "company": "Company name for this job"}\n'
                 '  ],\n'
                 '  "next_page": "URL of the next page of job listings if a pagination link exists, otherwise empty string"\n'
                 "}\n\n"
                 "Rules:\n"
-                "- Include ALL job postings found, not just those from the first company\n"
+                f"{company_rules}\n"
                 "- Only include <a href> links that point to individual job postings\n"
                 "- Use the href value exactly as it appears in the HTML\n"
-                "- Set company per job to the company that posted it\n"
                 "- If no department is labelled for a job, use 'General'\n"
-                "- Leave the top-level company field empty if multiple companies are present\n"
                 "- Set next_page only if there is a clearly labelled 'next page' or pagination link — otherwise leave empty\n"
                 "- Return empty lists if no jobs are found"
             )
