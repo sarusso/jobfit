@@ -866,8 +866,6 @@ def scrape_stream(request):
         s = re.sub(r"[^\w\s-]", "", s)
         return re.sub(r"[\s-]+", "_", s).strip("_") or "company"
 
-    fixed_company = _slugify(company_raw) if company_raw else None
-
     def generate():
         total = len(jobs)
         if not total:
@@ -876,12 +874,20 @@ def scrape_stream(request):
         if board == "lever":
             from lever_scraper import LeverScraper
             scraper = LeverScraper().setup(data_dir, client, timeout=timeout, openai_timeout=openai_timeout)
+            # Pass company=None so the LLM-extracted name determines the folder slug.
+            # Pre-populate each stub with the user-typed slug as fallback (used when OpenAI is off).
+            scrape_jobs = [{"company": company_raw, **j} for j in jobs]
+            fixed_company = None
+            display_name  = None
         else:
             from generic_scraper import GenericScraper
             scraper = GenericScraper().setup(data_dir, client, timeout=timeout,
                                              openai_timeout=openai_timeout, multi_company=multi_company)
-        last_company = fixed_company
-        for event in scraper.scrape_iter(jobs, fixed_company, company_name=company_raw or None):
+            scrape_jobs   = jobs
+            fixed_company = _slugify(company_raw) if company_raw else None
+            display_name  = company_raw or None
+        last_company = fixed_company or company_raw
+        for event in scraper.scrape_iter(scrape_jobs, fixed_company, company_name=display_name):
             event["total"] = total
             if event.get("company"):
                 last_company = event["company"]

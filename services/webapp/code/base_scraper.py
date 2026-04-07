@@ -181,11 +181,11 @@ class BaseScraper(ABC):
             with open(dest_dir / f"{role_id}.json", "w", encoding="utf-8") as f:
                 json.dump(job_data, f, indent=2, ensure_ascii=False)
             company_file = dest_dir / "_company.json"
-            if not company_file.exists() and job.get("company_description"):
+            if not company_file.exists() and (company_name or job.get("company") or job.get("company_description")):
                 with open(company_file, "w", encoding="utf-8") as f:
                     json.dump({
                         "company": company_name or job.get("company", company),
-                        "description": job["company_description"],
+                        "description": job.get("company_description", ""),
                     }, f, indent=2, ensure_ascii=False)
         return dest_dir
 
@@ -248,7 +248,7 @@ class BaseScraper(ABC):
                     else:
                         dest_company = "unknown"
                     event["company"] = dest_company
-                    self._save(url, pdf_tmp, dest_company, job, company_name=company_name if company else None)
+                    self._save(url, pdf_tmp, dest_company, job, company_name=company_name)
                     pdf_tmp.unlink(missing_ok=True)
                 except Exception as e:
                     event["error"] = str(e)
