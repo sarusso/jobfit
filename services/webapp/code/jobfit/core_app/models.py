@@ -1,4 +1,3 @@
-import uuid
 import logging
 
 from django.db import models
@@ -16,9 +15,13 @@ class LoginToken(models.Model):
 
 
 class Profile(models.Model):
-    user                = models.OneToOneField(User, on_delete=models.CASCADE)
-    email_updates       = models.BooleanField(default=False)
-    last_accepted_terms = models.FloatField('Last accepted TOS', default=0)
+    user                 = models.OneToOneField(User, on_delete=models.CASCADE)
+    timezone             = models.CharField('User Timezone', max_length=36, default='UTC')
+    type                 = models.CharField('Profile type', max_length=36, default='Standard')
+    plan                 = models.CharField('User plan', max_length=36, default='Free')
+    email_updates        = models.BooleanField(default=False)
+    last_accepted_terms   = models.FloatField('Last accepted TOS', default=0)
+    last_accepted_privacy = models.FloatField('Last accepted Privacy Policy', default=0)
 
     def __str__(self):
         return 'Profile of user "{}"'.format(self.user.email)

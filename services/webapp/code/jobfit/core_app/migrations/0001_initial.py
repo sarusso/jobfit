@@ -23,8 +23,12 @@ class Migration(migrations.Migration):
             name='Profile',
             fields=[
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('timezone', models.CharField(default='UTC', max_length=36, verbose_name='User Timezone')),
+                ('type', models.CharField(default='Standard', max_length=36, verbose_name='Profile type')),
+                ('plan', models.CharField(default='Free', max_length=36, verbose_name='User plan')),
                 ('email_updates', models.BooleanField(default=False)),
                 ('last_accepted_terms', models.FloatField(default=0, verbose_name='Last accepted TOS')),
+                ('last_accepted_privacy', models.FloatField(default=0, verbose_name='Last accepted Privacy Policy')),
                 ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, to='auth.User')),
             ],
         ),

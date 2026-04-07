@@ -167,6 +167,7 @@ def register(request):
                     user=user,
                     email_updates=email_updates,
                     last_accepted_terms=settings.TERMS_VERSION,
+                    last_accepted_privacy=settings.PRIVACY_VERSION,
                 )
 
                 data['status'] = 'activated'
@@ -192,10 +193,16 @@ def postlogin(request):
         Profile.objects.create(user=request.user)
         profile = request.user.profile
 
-    if profile.last_accepted_terms < settings.TERMS_VERSION:
+    needs_terms   = profile.last_accepted_terms   < settings.TERMS_VERSION
+    needs_privacy = profile.last_accepted_privacy < settings.PRIVACY_VERSION
+
+    if needs_terms or needs_privacy:
         accepted = booleanize(request.GET.get('accepted', False))
         if accepted:
-            profile.last_accepted_terms = settings.TERMS_VERSION
+            if needs_terms:
+                profile.last_accepted_terms = settings.TERMS_VERSION
+            if needs_privacy:
+                profile.last_accepted_privacy = settings.PRIVACY_VERSION
             profile.save()
             return HttpResponseRedirect('/account/')
         data = {'action': 'accept_terms'}
@@ -220,38 +227,40 @@ def account(request):
         profile = request.user.profile
     data['profile'] = profile
 
-    edit = request.GET.get('edit', None) or request.POST.get('edit', None)
+    edit = request.POST.get('edit', None)
+    if not edit:
+        edit = request.GET.get('edit', None)
     data['edit'] = edit
 
-    if request.method == 'POST':
-        value = request.POST.get('value', None)
+    value = request.POST.get('value', None)
 
-        if edit == 'email':
-            if value and '@' in value:
-                request.user.email = value
-                request.user.save()
-                data['success'] = 'Email updated.'
-            else:
-                raise ErrorMessage('Invalid email address.')
+    if request.method == 'POST' and edit:
 
-        elif edit == 'password':
-            if value and len(value) >= 6:
-                request.user.set_password(value)
-                request.user.save()
-                # Re-login after password change
-                user = authenticate(username=request.user.username, password=value)
-                if user:
-                    login(request, user)
-                data['success'] = 'Password updated.'
-            else:
-                raise ErrorMessage('Password must be at least 6 characters.')
+        if edit == 'email' and value:
+            request.user.email = value
+            request.user.save()
+
+        elif edit == 'password' and value:
+            request.user.set_password(value)
+            request.user.save()
+            user = authenticate(username=request.user.username, password=value)
+            if user:
+                login(request, user)
+
+        elif edit == 'timezone' and value:
+            profile.timezone = value
+            profile.save()
+
+        elif edit == 'type' and value:
+            profile.type = value
+            profile.save()
 
         elif edit == 'email_preferences':
-            profile.email_updates = booleanize(request.POST.get('email_updates', False))
-            profile.save()
-            data['success'] = 'Preferences saved.'
+            if booleanize(request.POST.get('do_update', False)):
+                profile.email_updates = booleanize(request.POST.get('email_updates', False))
+                profile.save()
 
-        elif edit == 'delete_account':
+        elif edit == 'delete_account' and value:
             if value == request.user.username:
                 request.user.delete()
                 logout(request)

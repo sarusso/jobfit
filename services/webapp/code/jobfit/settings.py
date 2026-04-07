@@ -88,6 +88,11 @@ try:
 except Exception:
     raise ImproperlyConfigured('Invalid TERMS_VERSION, must be a float') from None
 
+try:
+    PRIVACY_VERSION = float(os.environ.get('PRIVACY_VERSION', 1.0))
+except Exception:
+    raise ImproperlyConfigured('Invalid PRIVACY_VERSION, must be a float') from None
+
 # Email
 EMAIL_BACKEND       = os.environ.get('DJANGO_EMAIL_TYPE', 'django.core.mail.backends.smtp.EmailBackend')
 EMAIL_HOST          = os.environ.get('DJANGO_EMAIL_HOST', None)
