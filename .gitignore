@@ -19,8 +19,7 @@ output.pdf
 output.json
 ref_html.html.save
 data/
-1data/
-2data/
+data*/
 
 # Examples / scratch
 example.html
@@ -28,3 +27,6 @@ example.sh
 
 # macOS
 .DS_Store
+
+.project
+.pydevproject
