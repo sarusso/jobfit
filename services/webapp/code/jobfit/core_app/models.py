@@ -121,6 +121,33 @@ class Notes(models.Model):
         return f'Notes for {self.user.email}'
 
 
+class GiftCode(models.Model):
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code        = models.CharField(max_length=64, unique=True)
+    amount      = models.DecimalField(max_digits=10, decimal_places=4)  # USD
+    expires_at  = models.DateTimeField()
+    redeemed_by = models.ForeignKey('User', null=True, blank=True, on_delete=models.SET_NULL, related_name='redeemed_codes')
+    redeemed_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.code} (${self.amount})'
+
+
+class CreditLedger(models.Model):
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user        = models.ForeignKey('User', on_delete=models.CASCADE, related_name='ledger_entries')
+    amount      = models.DecimalField(max_digits=10, decimal_places=4)  # + credit, - debit
+    description = models.CharField(max_length=255)
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        sign = '+' if self.amount >= 0 else ''
+        return f'{sign}${self.amount} — {self.description} ({self.user.email})'
+
+
 class Score(models.Model):
     MODE_NORMAL = 'normal'
     MODE_BRUTAL = 'brutal'

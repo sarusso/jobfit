@@ -1,16 +1,20 @@
 import uuid
 import logging
+from decimal import Decimal
 
 from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseRedirect
 from django.contrib.auth import authenticate, login, logout
 from django.conf import settings
+from django.contrib import messages
 from django.core.mail import send_mail
+from django.db.models import Sum
+from django.utils import timezone
 
 from .decorators import public_view, private_view
 from .exceptions import ErrorMessage
 from .utils import booleanize, random_username
-from .models import User, LoginToken, Profile, LLMPricing
+from .models import User, LoginToken, Profile, LLMPricing, GiftCode, CreditLedger
 
 
 def _compute_usage_cost(usage: dict) -> float:
@@ -291,7 +295,60 @@ def account(request):
 
     data['total_cost'] = _compute_usage_cost(profile.usage or {})
 
+    balance_result = CreditLedger.objects.filter(user=request.user).aggregate(b=Sum('amount'))['b']
+    data['balance'] = balance_result if balance_result is not None else Decimal('0')
+    data['ledger']  = CreditLedger.objects.filter(user=request.user)[:20]
+
     return render(request, 'account.html', {'data': data})
+
+
+#=========================
+#  Gift code redemption
+#=========================
+
+@private_view
+def redeem_gift_code(request):
+    if request.method != 'POST':
+        return HttpResponseRedirect('/account/')
+
+    code_str = request.POST.get('code', '').strip()
+    if not code_str:
+        messages.warning(request, 'Please enter a gift code.')
+        return HttpResponseRedirect('/account/')
+
+    from django.db import transaction
+    try:
+        with transaction.atomic():
+            try:
+                gift = GiftCode.objects.select_for_update().get(code__iexact=code_str)
+            except GiftCode.DoesNotExist:
+                messages.warning(request, 'Invalid gift code.')
+                return HttpResponseRedirect('/account/')
+
+            if gift.redeemed_by_id is not None:
+                messages.warning(request, 'This code has already been redeemed.')
+                return HttpResponseRedirect('/account/')
+
+            if gift.expires_at < timezone.now():
+                messages.warning(request, 'This gift code has expired.')
+                return HttpResponseRedirect('/account/')
+
+            gift.redeemed_by = request.user
+            gift.redeemed_at = timezone.now()
+            gift.save(update_fields=['redeemed_by', 'redeemed_at'])
+
+            CreditLedger.objects.create(
+                user=request.user,
+                amount=gift.amount,
+                description=f'Gift code {code_str}',
+            )
+    except Exception as e:
+        logger.error('Gift code redemption error: %s', e)
+        messages.warning(request, 'An error occurred. Please try again.')
+        return HttpResponseRedirect('/account/')
+
+    messages.success(request, f'${gift.amount:.2f} added to your account.')
+    return HttpResponseRedirect('/account/')
 
 
 #=========================

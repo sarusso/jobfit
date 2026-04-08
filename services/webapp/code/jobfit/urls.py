@@ -20,7 +20,8 @@ urlpatterns = [
     url(r'^logout/$',    views.user_logout),
     url(r'^register/$',  views.register),
     url(r'^postlogin/$', views.postlogin),
-    url(r'^account/$',   views.account),
+    url(r'^account/$',         views.account),
+    url(r'^account/redeem/$',  views.redeem_gift_code),
     url(r'^privacy/$',   views.privacy),
     url(r'^terms/$',     views.terms),
 

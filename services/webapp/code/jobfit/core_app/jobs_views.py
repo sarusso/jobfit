@@ -16,6 +16,7 @@ import json
 import logging
 import re
 import uuid as uuid_module
+from decimal import Decimal
 from pathlib import Path
 
 from django.conf import settings
@@ -27,7 +28,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
 from .decorators import private_view
-from .models import CV, Company, Job, Notes, Score, LLMPricing, Profile
+from .models import CV, Company, Job, Notes, Score, LLMPricing, Profile, CreditLedger
 
 log = logging.getLogger(__name__)
 
@@ -39,8 +40,14 @@ MAX_RETRIES   = 3
 # LLM usage tracking                                                 #
 # ------------------------------------------------------------------ #
 
+def _get_balance(user) -> Decimal:
+    from django.db.models import Sum
+    result = CreditLedger.objects.filter(user=user).aggregate(b=Sum('amount'))['b']
+    return result if result is not None else Decimal('0')
+
+
 def _track_usage(user, provider: str, model: str, usage):
-    """Atomically record LLM token usage on the user's Profile.
+    """Atomically record LLM token usage on the user's Profile and deduct cost from balance.
 
     usage: object with .prompt_tokens and .completion_tokens,
            or a plain dict with the same keys.
@@ -60,6 +67,14 @@ def _track_usage(user, provider: str, model: str, usage):
     ).first()
     key = pricing.pricing_key() if pricing else "0-0"
 
+    if pricing:
+        cost = (
+            Decimal(str(prompt_tokens))     * Decimal(str(pricing.price.get("prompt_tokens", 0))) +
+            Decimal(str(completion_tokens)) * Decimal(str(pricing.price.get("completion_tokens", 0)))
+        ) / Decimal('1000000')
+    else:
+        cost = Decimal('0')
+
     with transaction.atomic():
         profile, _ = Profile.objects.select_for_update().get_or_create(user=user)
         u = profile.usage or {}
@@ -70,6 +85,14 @@ def _track_usage(user, provider: str, model: str, usage):
         u[provider][model][key]["completion_tokens"] += completion_tokens
         profile.usage = u
         profile.save(update_fields=["usage"])
+
+    if cost > Decimal('0'):
+        total_tokens = prompt_tokens + completion_tokens
+        CreditLedger.objects.create(
+            user=user,
+            amount=-cost,
+            description=f"{provider} {model} — {total_tokens:,} tokens",
+        )
 
 
 # ------------------------------------------------------------------ #
@@ -618,6 +641,10 @@ def add_job_url(request):
         messages.warning(request, "OPENAI_KEY is not configured.")
         return _modal_add_jobs_redirect(request)
 
+    if _get_balance(request.user) < 0:
+        messages.warning(request, "Your balance is negative. Please top up your account before adding jobs.")
+        return _modal_add_jobs_redirect(request)
+
     pdf_bytes = None
     if pdf_file:
         fname = pdf_file.name.lower()
@@ -672,6 +699,10 @@ def add_job_text(request):
         messages.warning(request, "OPENAI_KEY is not configured.")
         return _modal_add_jobs_redirect(request)
 
+    if _get_balance(request.user) < 0:
+        messages.warning(request, "Your balance is negative. Please top up your account before adding jobs.")
+        return _modal_add_jobs_redirect(request)
+
     job_data, llm_usage = _analyse_jd(text, client, url=url)
     _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage)
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
@@ -706,6 +737,9 @@ def extract_pdf_jobs(request):
     client = _openai_client()
     if not client:
         return JsonResponse({"error": "OPENAI_KEY is not configured."}, status=400)
+
+    if _get_balance(request.user) < 0:
+        return JsonResponse({"error": "Your balance is negative. Please top up your account."}, status=402)
 
     try:
         from pypdf import PdfReader
@@ -763,6 +797,8 @@ def scrape_categories(request):
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
     else:
+        if _get_balance(request.user) < 0:
+            return JsonResponse({"error": "Your balance is negative. Please top up your account."}, status=402)
         try:
             from generic_scraper import GenericScraper
         except ImportError:
@@ -856,6 +892,9 @@ def scrape_stream(request):
                 job_data = dict(j.get("job_data") or {})
                 title = j.get("title") or job_data.get("title", f"Job {i}")
                 yield f"data: {json.dumps({'starting': True, 'current': i, 'total': total, 'title': title})}\n\n"
+                if _get_balance(user) < 0:
+                    yield f"data: {json.dumps({'current': i, 'total': total, 'title': title, 'error': 'Balance is negative — stopping.'})}\n\n"
+                    break
                 try:
                     company_name_raw = (job_data.get("company") or "").strip() or "Unknown"
                     description      = job_data.pop("company_description", "") or ""
@@ -925,6 +964,10 @@ def scrape_stream(request):
 
             # Create Company + Job models from completed events
             if not event.get("starting") and not event.get("error"):
+                if _get_balance(user) < 0:
+                    event["error"] = "Balance is negative — stopping."
+                    yield f"data: {json.dumps(event)}\n\n"
+                    break
                 llm_usage = event.get("llm_usage")
                 if llm_usage:
                     _track_usage(user, "openai", "gpt-4o-mini", llm_usage)
@@ -995,6 +1038,10 @@ def score_one(request, company_slug, job_id):
         messages.warning(request, "OPENAI_KEY is not configured.")
         return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
 
+    if _get_balance(request.user) < 0:
+        messages.warning(request, "Your balance is negative. Please top up your account.")
+        return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
+
     mode           = _current_mode(request)
     with_notes_txt = _get_notes_text(request) if _use_notes(request) else ""
 
@@ -1032,6 +1079,9 @@ def score_company_stream(request, company_slug):
 
     def generate():
         for i, job in enumerate(to_score, 1):
+            if _get_balance(user) < 0:
+                yield f"data: {json.dumps({'current': i, 'total': total, 'title': job.title, 'failed': True, 'error': 'Balance is negative — stopping.'})}\n\n"
+                break
             yield f"data: {json.dumps({'current': i, 'total': total, 'title': job.title})}\n\n"
             last_error = None
             for attempt in range(1, MAX_RETRIES + 1):
