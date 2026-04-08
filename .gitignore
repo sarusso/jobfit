@@ -3,6 +3,10 @@ config.env
 .env
 *.env
 
+# Local docker-compose (contains secrets)
+docker-compose.yml
+docker-compose-dev.yml
+
 # Python
 venv/
 __pycache__/

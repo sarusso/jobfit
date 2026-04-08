@@ -1,18 +1,18 @@
 {% extends "base_jobs.html" %}
 {% load jobs_tags %}
-{% block title %}JobFit — {{ company_info.company|default:company }}{% endblock %}
+{% block title %}JobFit — {{ company.name }}{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{% url 'jobs_index' %}">Companies</a></li>
-    <li class="breadcrumb-item active">{{ company_info.company|default:company }}</li>
+    <li class="breadcrumb-item active">{{ company.name }}</li>
   </ol>
 </nav>
 
 <div class="mb-4">
   <div class="d-flex justify-content-between align-items-baseline flex-wrap gap-2">
-    <h2 class="mb-0">{{ company_info.company|default:company }}</h2>
+    <h2 class="mb-0">{{ company.name }}</h2>
     <div class="d-flex align-items-center gap-3 flex-wrap">
       <span class="text-muted">{{ active_jobs|length|add:archived_jobs|length }} role{% if active_jobs|length|add:archived_jobs|length != 1 %}s{% endif %}</span>
       <select id="sort-select" class="form-select form-select-sm" style="width:auto" onchange="sortJobs(this.value)">
@@ -23,27 +23,27 @@
       </select>
       <button class="btn btn-sm btn-outline-primary" {% if not can_score %}disabled{% endif %}
               title="{% if not has_openai_key %}Requires OpenAI key{% elif not cv_uploaded %}Upload a CV to enable scoring{% endif %}"
-              onclick="scoreAll('{{ company }}')">Score all vs CV</button>
-      <form action="{% url 'jobs_score_clear' company %}" method="post" class="m-0">
+              onclick="scoreAll('{{ company.slug }}')">Score all vs CV</button>
+      <form action="{% url 'jobs_score_clear' company.slug %}" method="post" class="m-0">
         {% csrf_token %}
         <button class="btn btn-sm btn-outline-danger"
                 onclick="return confirm('Clear all scores for this company?')">Clear scores</button>
       </form>
-      {% if company_info.archived %}
-      <form action="{% url 'jobs_unarchive_company' company %}" method="post" class="m-0">
+      {% if company.archived %}
+      <form action="{% url 'jobs_unarchive_company' company.slug %}" method="post" class="m-0">
         {% csrf_token %}
         <button class="btn btn-sm btn-warning">Unarchive company</button>
       </form>
       {% else %}
-      <form action="{% url 'jobs_archive_company' company %}" method="post" class="m-0">
+      <form action="{% url 'jobs_archive_company' company.slug %}" method="post" class="m-0">
         {% csrf_token %}
         <button class="btn btn-sm btn-outline-secondary">Archive company</button>
       </form>
       {% endif %}
     </div>
   </div>
-  {% if company_info.description %}
-  <p class="text-muted mt-2 mb-0">{{ company_info.description }}</p>
+  {% if company.description %}
+  <p class="text-muted mt-2 mb-0">{{ company.description }}</p>
   {% endif %}
 </div>
 
@@ -58,7 +58,7 @@
         <div class="d-flex align-items-center gap-2 mb-1">
           {% score_badge job.score "fs-6 px-2 py-1" %}
           <h5 class="mb-0">
-            <a href="{% url 'jobs_job' company job.role_id %}" class="text-decoration-none text-dark stretched-link">
+            <a href="{% url 'jobs_job' company.slug job.id %}" class="text-decoration-none text-dark stretched-link">
               {{ job.title|default:"—" }}
             </a>
           </h5>
@@ -76,7 +76,7 @@
         {% if job.score %}<p class="text-muted mb-0 small fst-italic">&#128269; {{ job.score.reasoning }}</p>{% endif %}
       </div>
       <div class="d-flex gap-2 flex-shrink-0 position-relative" style="z-index:1">
-        <form action="{% url 'jobs_score_one' company job.role_id %}" method="post" class="m-0">
+        <form action="{% url 'jobs_score_one' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-sm btn-outline-secondary" {% if not can_score %}disabled{% endif %}
                   title="{% if not has_openai_key %}Requires OpenAI key{% elif not cv_uploaded %}Upload a CV{% endif %}">
@@ -84,13 +84,13 @@
           </button>
         </form>
         {% if job.has_pdf %}
-        <a href="{% url 'jobs_job_pdf' company job.role_id %}" target="_blank" class="btn btn-sm btn-outline-secondary">PDF</a>
+        <a href="{% url 'jobs_job_pdf' company.slug job.id %}" target="_blank" class="btn btn-sm btn-outline-secondary">PDF</a>
         {% endif %}
-        <form action="{% url 'jobs_archive_job' company job.role_id %}" method="post" class="m-0">
+        <form action="{% url 'jobs_archive_job' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-sm btn-outline-secondary">Archive</button>
         </form>
-        <form action="{% url 'jobs_delete' company job.role_id %}" method="post" class="m-0">
+        <form action="{% url 'jobs_delete' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove this job?')">&#128465;</button>
         </form>
@@ -114,18 +114,18 @@
         <div class="d-flex align-items-center gap-2 mb-1">
           {% score_badge job.score "fs-6 px-2 py-1" %}
           <h5 class="mb-0 text-muted">
-            <a href="{% url 'jobs_job' company job.role_id %}" class="text-decoration-none text-muted stretched-link">
+            <a href="{% url 'jobs_job' company.slug job.id %}" class="text-decoration-none text-muted stretched-link">
               {{ job.title|default:"—" }}
             </a>
           </h5>
         </div>
       </div>
       <div class="d-flex gap-2 flex-shrink-0 position-relative" style="z-index:1">
-        <form action="{% url 'jobs_unarchive_job' company job.role_id %}" method="post" class="m-0">
+        <form action="{% url 'jobs_unarchive_job' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-sm btn-warning">Unarchive</button>
         </form>
-        <form action="{% url 'jobs_delete' company job.role_id %}" method="post" class="m-0">
+        <form action="{% url 'jobs_delete' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove this job?')">&#128465;</button>
         </form>

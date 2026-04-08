@@ -158,13 +158,13 @@
               <div class="d-flex align-items-center justify-content-center rounded flex-shrink-0 text-white fw-bold"
                    style="width:2.8rem;height:3.5rem;background:{% if cv.selected %}#198754{% else %}#adb5bd{% endif %};font-size:.6rem;letter-spacing:.04em">PDF</div>
               <div class="flex-grow-1 min-width-0">
-                <form action="{% url 'jobs_cv_rename' cv.hash %}" method="post" class="d-flex align-items-center gap-1 mb-1">
+                <form action="{% url 'jobs_cv_rename' cv.id %}" method="post" class="d-flex align-items-center gap-1 mb-1">
                   {% csrf_token %}
                   <input type="text" name="name" value="{{ cv.name }}"
                          class="form-control form-control-sm fw-semibold border-0 bg-transparent px-1"
-                         style="min-width:0" id="cv-name-{{ cv.hash }}"
-                         onchange="document.getElementById('cv-save-{{ cv.hash }}').classList.remove('d-none')">
-                  <button type="submit" id="cv-save-{{ cv.hash }}" class="btn btn-sm btn-outline-success d-none">&#10003;</button>
+                         style="min-width:0" id="cv-name-{{ cv.id }}"
+                         onchange="document.getElementById('cv-save-{{ cv.id }}').classList.remove('d-none')">
+                  <button type="submit" id="cv-save-{{ cv.id }}" class="btn btn-sm btn-outline-success d-none">&#10003;</button>
                 </form>
                 <div class="text-muted" style="font-size:.75rem">Uploaded {{ cv.uploaded }}</div>
               </div>
@@ -172,13 +172,13 @@
                 {% if cv.selected %}
                   <span class="badge bg-success d-inline-flex align-items-center" style="height:2rem;padding:0 .6rem;font-size:.75rem">Active</span>
                 {% else %}
-                  <form action="{% url 'jobs_cv_select' cv.hash %}" method="post" class="m-0">
+                  <form action="{% url 'jobs_cv_select' cv.id %}" method="post" class="m-0">
                     {% csrf_token %}
                     <button class="btn btn-sm btn-outline-success">Make active</button>
                   </form>
                 {% endif %}
-                <a href="{% url 'jobs_cv_view_specific' cv.hash %}" target="_blank" class="btn btn-sm btn-outline-secondary">View</a>
-                <form action="{% url 'jobs_cv_delete' cv.hash %}" method="post" class="m-0">
+                <a href="{% url 'jobs_cv_view_specific' cv.id %}" target="_blank" class="btn btn-sm btn-outline-secondary">View</a>
+                <form action="{% url 'jobs_cv_delete' cv.id %}" method="post" class="m-0">
                   {% csrf_token %}
                   <button class="btn btn-sm btn-outline-danger"
                           onclick="return confirm('Delete this CV? Its cached scores will no longer be accessible.')">&#128465;</button>

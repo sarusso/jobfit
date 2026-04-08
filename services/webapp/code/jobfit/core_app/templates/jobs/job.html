@@ -1,12 +1,12 @@
 {% extends "base_jobs.html" %}
 {% load jobs_tags %}
-{% block title %}JobFit — {{ job.title }} — {{ job.company }}{% endblock %}
+{% block title %}JobFit — {{ job.title }} — {{ job.company.name }}{% endblock %}
 
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
   <ol class="breadcrumb">
     <li class="breadcrumb-item"><a href="{% url 'jobs_index' %}">Companies</a></li>
-    <li class="breadcrumb-item"><a href="{% url 'jobs_company' company %}">{{ job.company|default:company }}</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'jobs_company' company.slug %}">{{ company.name }}</a></li>
     <li class="breadcrumb-item active">{{ job.title }}</li>
   </ol>
 </nav>
@@ -16,7 +16,7 @@
     <div class="d-flex justify-content-between align-items-start">
       <div>
         <h2 class="mb-1">{{ job.title|default:"—" }}</h2>
-        <div class="text-muted fs-6 mb-3">{{ job.company }}</div>
+        <div class="text-muted fs-6 mb-3">{{ job.company.name }}</div>
         <div class="d-flex flex-wrap gap-2">
           {% if job.location %}<span class="badge badge-loc px-3 py-2">&#128205; {{ job.location }}</span>{% endif %}
           {% if job.employment_type %}<span class="badge badge-type px-3 py-2">{{ job.employment_type }}</span>{% endif %}
@@ -28,7 +28,7 @@
         </div>
       </div>
       <div class="d-flex gap-2 ms-3 flex-shrink-0 align-items-start flex-wrap">
-        <form action="{% url 'jobs_score_one' company job.role_id %}" method="post" class="m-0">
+        <form action="{% url 'jobs_score_one' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-outline-primary" {% if not can_score %}disabled{% endif %}
                   title="{% if not has_openai_key %}Requires OpenAI key{% elif not cv_uploaded %}Upload a CV to enable scoring{% endif %}">
@@ -36,23 +36,23 @@
           </button>
         </form>
         {% if job.has_pdf %}
-        <a href="{% url 'jobs_job_pdf' company job.role_id %}" target="_blank" class="btn btn-outline-secondary">&#128196; PDF</a>
+        <a href="{% url 'jobs_job_pdf' company.slug job.id %}" target="_blank" class="btn btn-outline-secondary">&#128196; PDF</a>
         {% endif %}
-        {% if job.url %}
-        <a href="{{ job.url }}" target="_blank" class="btn btn-outline-secondary">&#127760; Source</a>
+        {% if job.source and job.source != 'text' and job.source != 'file' %}
+        <a href="{{ job.source }}" target="_blank" class="btn btn-outline-secondary">&#127760; Source</a>
         {% endif %}
         {% if job.archived %}
-        <form action="{% url 'jobs_unarchive_job' company job.role_id %}" method="post" class="m-0">
+        <form action="{% url 'jobs_unarchive_job' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-warning">Unarchive</button>
         </form>
         {% else %}
-        <form action="{% url 'jobs_archive_job' company job.role_id %}" method="post" class="m-0">
+        <form action="{% url 'jobs_archive_job' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-outline-secondary">Archive</button>
         </form>
         {% endif %}
-        <form action="{% url 'jobs_delete' company job.role_id %}" method="post" class="m-0">
+        <form action="{% url 'jobs_delete' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-outline-danger" onclick="return confirm('Remove this job?')">&#128465; Delete</button>
         </form>
@@ -139,12 +139,11 @@
                 <a href="{% url 'jobs_help' %}" class="text-decoration-none" title="How is this score calculated?"
                    style="display:inline-flex;align-items:center;justify-content:center;width:1.1rem;height:1.1rem;border-radius:50%;border:1.5px solid #adb5bd;color:#adb5bd;font-size:.65rem;font-weight:700;line-height:1;">?</a>
               </div>
-              {% if job.score.cv_hash or job.score_delta is not None %}
+              {% if job.score.cv_id or job.score.with_notes %}
               <div class="small text-muted">
-                {% if job.score.cv_hash %}with <a href="{% url 'jobs_cv_view_specific' job.score.cv_hash %}" target="_blank" class="text-muted text-decoration-underline">this CV</a>{% endif %}
-                {% if job.score_delta is not None %}
-                (<span class="fw-semibold {% if job.score_delta > 0 %}text-success{% elif job.score_delta < 0 %}text-danger{% else %}text-muted{% endif %}">{% if job.score_delta >= 0 %}+{% endif %}{{ job.score_delta }}</span>
-                with <a href="#" class="text-muted text-decoration-underline" data-bs-toggle="modal" data-bs-target="#notesUsedModal">notes</a>)
+                {% if job.score.cv_id %}with <a href="{% url 'jobs_cv_view_specific' job.score.cv_id %}" target="_blank" class="text-muted text-decoration-underline">this CV</a>{% endif %}
+                {% if job.score.with_notes %}
+                &amp; <a href="#" class="text-muted text-decoration-underline" data-bs-toggle="modal" data-bs-target="#notesUsedModal">these notes</a>
                 {% endif %}
               </div>
               {% endif %}
@@ -193,9 +192,9 @@
               <div class="d-flex align-items-center gap-2 small">
                 <span class="badge score-low">{{ s.score }}/10</span>
             {% endif %}
-              <a href="{% url 'jobs_cv_view_specific' s.cv_hash %}" target="_blank" class="text-truncate text-decoration-none text-dark" style="max-width:9rem" title="{{ s.cv_name }}">{{ s.cv_name }}</a>
+              <a href="{% url 'jobs_cv_view_specific' s.cv.id %}" target="_blank" class="text-truncate text-decoration-none text-dark" style="max-width:9rem" title="{{ s.cv.name }}">{{ s.cv.name }}</a>
               {% if s.mode == 'brutal' %}<span class="badge bg-danger" style="font-size:.6rem">brutal</span>{% endif %}
-              {% if s.use_notes %}<span class="text-muted" style="font-size:.7rem">w/notes</span>{% endif %}
+              {% if s.with_notes %}<span class="text-muted" style="font-size:.7rem">w/notes</span>{% endif %}
             </div>
             {% endfor %}
           </div>
@@ -215,8 +214,8 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        {% if job.score and job.score.notes_used %}
-        <pre class="mb-0 small">{{ job.score.notes_used }}</pre>
+        {% if job.score and job.score.with_notes %}
+        <pre class="mb-0 small">{{ job.score.with_notes }}</pre>
         {% else %}
         <p class="text-muted mb-0">Notes used for this scoring are not available.</p>
         {% endif %}

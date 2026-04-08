@@ -15,11 +15,11 @@
         </div>
         <div class="list-group list-group-flush" id="company-list">
           {% for company in active_companies %}
-          <a href="{% url 'jobs_company' company.name %}"
+          <a href="{% url 'jobs_company' company.slug %}"
              class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 company-link"
-             data-name="{{ company.info.company|default:company.name|lower }}">
+             data-name="{{ company.name|lower }}">
             <span class="company-label text-truncate me-2">
-              {{ company.info.company|default:company.name }}
+              {{ company.name }}
             </span>
             <div class="d-flex gap-1 flex-shrink-0">
               {% if company.top_score is not None %}
@@ -31,7 +31,7 @@
                   <span class="badge score-low rounded-pill">&#127941; {{ company.top_score }}/10</span>
                 {% endif %}
               {% endif %}
-              <span class="badge bg-secondary rounded-pill">{{ company.jobs|length }}</span>
+              <span class="badge bg-secondary rounded-pill">{{ company.jobs.count }}</span>
             </div>
           </a>
           {% endfor %}
@@ -55,11 +55,11 @@
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-start">
           <div class="flex-grow-1 me-3">
-            <a href="{% url 'jobs_company' company.name %}" class="text-decoration-none text-dark fw-bold fs-5 stretched-link">
-              {{ company.info.company|default:company.name }}
+            <a href="{% url 'jobs_company' company.slug %}" class="text-decoration-none text-dark fw-bold fs-5 stretched-link">
+              {{ company.name }}
             </a>
-            {% if company.info.description %}
-            <p class="text-muted small mb-0 mt-1">{{ company.info.description }}</p>
+            {% if company.description %}
+            <p class="text-muted small mb-0 mt-1">{{ company.description }}</p>
             {% endif %}
           </div>
           <div class="d-flex gap-2 align-items-center ms-3 flex-shrink-0 position-relative" style="z-index:1">
@@ -73,7 +73,7 @@
               {% endif %}
             {% endif %}
             <span class="badge bg-secondary">
-              {{ company.jobs|length }} role{{ company.jobs|length|pluralize }}
+              {{ company.jobs.count }} role{{ company.jobs.count|pluralize }}
             </span>
           </div>
         </div>
@@ -90,11 +90,11 @@
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-start">
           <div class="flex-grow-1 me-3">
-            <a href="{% url 'jobs_company' company.name %}" class="text-decoration-none text-muted fw-bold fs-5 stretched-link">
-              {{ company.info.company|default:company.name }}
+            <a href="{% url 'jobs_company' company.slug %}" class="text-decoration-none text-muted fw-bold fs-5 stretched-link">
+              {{ company.name }}
             </a>
           </div>
-          <span class="badge bg-secondary">{{ company.jobs|length }} role{{ company.jobs|length|pluralize }}</span>
+          <span class="badge bg-secondary">{{ company.jobs.count }} role{{ company.jobs.count|pluralize }}</span>
         </div>
       </div>
     </div>

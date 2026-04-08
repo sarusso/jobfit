@@ -4,14 +4,13 @@ import logging
 from django.shortcuts import render
 from django.http import HttpResponse, HttpResponseRedirect
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.models import User
 from django.conf import settings
 from django.core.mail import send_mail
 
 from .decorators import public_view, private_view
 from .exceptions import ErrorMessage
 from .utils import booleanize, random_username
-from .models import LoginToken, Profile
+from .models import User, LoginToken, Profile
 
 logger = logging.getLogger(__name__)
 

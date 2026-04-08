@@ -4,7 +4,6 @@ from rest_framework.test import APIClient as Client
 from django.test.client import MULTIPART_CONTENT
 from rest_framework import status
 from rest_framework.reverse import reverse
-from django.contrib.auth.models import User
 
 class APIClient(Client):
     # Add patch to test client object

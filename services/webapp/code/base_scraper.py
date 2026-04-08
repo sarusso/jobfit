@@ -208,6 +208,11 @@ class BaseScraper(ABC):
         company: fixed directory slug for all jobs, or None to derive it from
                  each job's extracted company name (per-job auto-detect mode).
         company_name: user-supplied company name; overrides LLM-extracted company name when set.
+
+        If a job stub contains 'pdf_output_path', the PDF is saved there directly and
+        'job_data' + 'uuid' are included in the yielded event (web/Django mode).
+        Otherwise the classic CLI behaviour applies (_save writes to data/<company>/).
+
         Call setup() first."""
         import re
         import tempfile
@@ -226,30 +231,60 @@ class BaseScraper(ABC):
             for i, job_stub in enumerate(jobs, 1):
                 url = job_stub.get("url", "")
                 event: dict = {"current": i, "url": url, "title": job_stub.get("title") or url}
+                if job_stub.get("uuid"):
+                    event["uuid"] = job_stub["uuid"]
                 yield {**event, "starting": True}
                 try:
-                    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                        pdf_tmp = Path(tmp.name)
-                    page_text = self.render_to_pdf(url, pdf_tmp, page)
-                    job = None
-                    if self._openai_client:
-                        try:
-                            job = self.analyse_job(page_text, url)
-                            event["title"] = job.get("title") or event["title"]
-                        except Exception as e:
-                            event["analyse_error"] = str(e)
-                    # Resolve company directory: fixed > JD analysis > pre-fetched stub > URL hostname
-                    if company:
-                        dest_company = company
-                    elif job and job.get("company"):
-                        dest_company = _slugify(job["company"])
-                    elif job_stub.get("company"):
-                        dest_company = _slugify(job_stub["company"])
+                    pdf_output_path = job_stub.get("pdf_output_path")
+                    if pdf_output_path:
+                        # Web/Django mode: save PDF to pre-determined path, yield job_data for model creation
+                        pdf_dest = Path(pdf_output_path)
+                        pdf_dest.parent.mkdir(parents=True, exist_ok=True)
+                        page_text = self.render_to_pdf(url, pdf_dest, page)
+                        job = None
+                        if self._openai_client:
+                            try:
+                                job = self.analyse_job(page_text, url)
+                                event["title"] = job.get("title") or event["title"]
+                            except Exception as e:
+                                event["analyse_error"] = str(e)
+                        if job:
+                            if company_name:
+                                job["company"] = company_name
+                            event["job_data"] = job
+                        # Resolve display company slug for the event
+                        if company:
+                            dest_company = company
+                        elif job and job.get("company"):
+                            dest_company = _slugify(job["company"])
+                        elif job_stub.get("company"):
+                            dest_company = _slugify(job_stub["company"])
+                        else:
+                            dest_company = "unknown"
+                        event["company"] = dest_company
                     else:
-                        dest_company = "unknown"
-                    event["company"] = dest_company
-                    self._save(url, pdf_tmp, dest_company, job, company_name=company_name)
-                    pdf_tmp.unlink(missing_ok=True)
+                        # CLI mode: use temp file then _save to data/<company>/
+                        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                            pdf_tmp = Path(tmp.name)
+                        page_text = self.render_to_pdf(url, pdf_tmp, page)
+                        job = None
+                        if self._openai_client:
+                            try:
+                                job = self.analyse_job(page_text, url)
+                                event["title"] = job.get("title") or event["title"]
+                            except Exception as e:
+                                event["analyse_error"] = str(e)
+                        if company:
+                            dest_company = company
+                        elif job and job.get("company"):
+                            dest_company = _slugify(job["company"])
+                        elif job_stub.get("company"):
+                            dest_company = _slugify(job_stub["company"])
+                        else:
+                            dest_company = "unknown"
+                        event["company"] = dest_company
+                        self._save(url, pdf_tmp, dest_company, job, company_name=company_name)
+                        pdf_tmp.unlink(missing_ok=True)
                 except Exception as e:
                     event["error"] = str(e)
                 yield event

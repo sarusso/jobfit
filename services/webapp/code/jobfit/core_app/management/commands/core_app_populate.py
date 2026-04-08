@@ -1,6 +1,5 @@
 from django.core.management.base import BaseCommand
-from django.contrib.auth.models import User
-from ...models import Profile
+from ...models import User, Profile
 from django.conf import settings
 
 

@@ -1,6 +1,6 @@
 import json
 
-from django.contrib.auth.models import User
+from ..models import User
 
 from .common import BaseAPITestCase
 from ..utils import sanitize_container_env_vars

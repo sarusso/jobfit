@@ -1,16 +1,11 @@
 """
-jobs_views.py — Django port of the singleuser Flask app.
+jobs_views.py — Django views for the jobs app, backed by Django models.
 
-Data layout (per user):
+File storage layout (per user):
     DATA_DIR/<username>/
-        _cvs/_index.json
-        _cvs/<hash>.pdf
-        _notes.txt
-        <company>/
-            _company.json
-            <role_id>.json
-            <role_id>.pdf
-            _scores/<role_id>_<mode>[_notes]_<h8>.json
+        _cvs/<hash>.pdf          # CV files
+        jobs/<uuid>.pdf          # job source PDFs
+        jobs/<uuid>.txt          # job source text (future)
 """
 from __future__ import annotations
 
@@ -20,8 +15,7 @@ import io
 import json
 import logging
 import re
-import shutil
-from datetime import datetime
+import uuid as uuid_module
 from pathlib import Path
 
 from django.conf import settings
@@ -29,10 +23,11 @@ from django.contrib import messages
 from django.http import (FileResponse, Http404, HttpResponse,
                          HttpResponseRedirect, JsonResponse,
                          StreamingHttpResponse)
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
 from .decorators import private_view
+from .models import CV, Company, Job, Notes, Score
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +36,7 @@ MAX_RETRIES   = 3
 
 
 # ------------------------------------------------------------------ #
-# Per-user path helpers                                               #
+# Path helpers (files only — metadata lives in models)               #
 # ------------------------------------------------------------------ #
 
 def _data_dir(request) -> Path:
@@ -50,144 +45,56 @@ def _data_dir(request) -> Path:
 def _cvs_dir(data_dir: Path) -> Path:
     return data_dir / "_cvs"
 
-def _cv_index_path(data_dir: Path) -> Path:
-    return _cvs_dir(data_dir) / "_index.json"
-
-def _notes_path(data_dir: Path) -> Path:
-    return data_dir / "_notes.txt"
+def _jobs_dir(data_dir: Path) -> Path:
+    return data_dir / "jobs"
 
 
 # ------------------------------------------------------------------ #
-# CV helpers                                                          #
-# ------------------------------------------------------------------ #
-
-def _cv_index(data_dir: Path) -> dict:
-    p = _cv_index_path(data_dir)
-    if not p.exists():
-        return {"selected": None, "cvs": {}}
-    with open(p, encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _save_cv_index(data_dir: Path, index: dict) -> None:
-    _cvs_dir(data_dir).mkdir(parents=True, exist_ok=True)
-    with open(_cv_index_path(data_dir), "w", encoding="utf-8") as f:
-        json.dump(index, f, indent=2, ensure_ascii=False)
-
-
-def _selected_cv_path(data_dir: Path):
-    idx = _cv_index(data_dir)
-    h = idx.get("selected")
-    if not h:
-        return None
-    p = _cvs_dir(data_dir) / f"{h}.pdf"
-    return p if p.exists() else None
-
-
-def _cv_hash(data_dir: Path):
-    p = _selected_cv_path(data_dir)
-    return p.stem if p else None
-
-
-def _all_cvs(data_dir: Path) -> list:
-    idx = _cv_index(data_dir)
-    result = []
-    for h, meta in idx.get("cvs", {}).items():
-        p = _cvs_dir(data_dir) / f"{h}.pdf"
-        if not p.exists():
-            continue
-        try:
-            uploaded_str = datetime.fromisoformat(meta.get("uploaded", "")).strftime("%-d %B %Y, %H:%M")
-        except Exception:
-            uploaded_str = "Unknown"
-        result.append({
-            "hash": h,
-            "name": meta.get("name", "CV"),
-            "uploaded": uploaded_str,
-            "uploaded_ts": meta.get("uploaded", ""),
-            "selected": h == idx.get("selected"),
-        })
-    result.sort(key=lambda x: x["uploaded_ts"], reverse=True)
-    return result
-
-
-# ------------------------------------------------------------------ #
-# Score helpers                                                       #
+# Session helpers                                                     #
 # ------------------------------------------------------------------ #
 
 def _current_mode(request) -> str:
     return request.session.get("scoring_mode", "normal")
 
-
 def _use_notes(request) -> bool:
     return request.session.get("use_notes", False)
 
-
-def _score_path(data_dir: Path, company: str, role_id: str, mode: str,
-                use_notes: bool = False, cv_hash: str | None = None) -> Path:
-    h8 = (cv_hash or _cv_hash(data_dir) or "nocv")[:8]
-    suffix = f"{mode}_notes_{h8}" if use_notes else f"{mode}_{h8}"
-    return data_dir / company / "_scores" / f"{role_id}_{suffix}.json"
-
-
-def _load_score(data_dir: Path, company: str, role_id: str,
-                mode: str | None = None, use_notes: bool | None = None,
-                cv_hash_override: str | None = None) -> dict | None:
-    if mode is None:
-        mode = "normal"
-    if use_notes is None:
-        use_notes = False
-    cv_h = cv_hash_override or _cv_hash(data_dir)
-    path = _score_path(data_dir, company, role_id, mode, use_notes, cv_h)
-    if not path.exists():
+def _get_selected_cv(request):
+    """Return the selected CV model instance, or None."""
+    cv_id = request.session.get("selected_cv_id")
+    if not cv_id:
         return None
-    with open(path, encoding="utf-8") as f:
-        data = json.load(f)
-    if data.get("cv_hash") != cv_h:
+    try:
+        return CV.objects.get(id=cv_id, user=request.user)
+    except CV.DoesNotExist:
         return None
-    return data
+
+def _get_notes_text(request) -> str:
+    try:
+        return Notes.objects.get(user=request.user).content.strip()
+    except Notes.DoesNotExist:
+        return ""
 
 
-def _all_cv_scores(data_dir: Path, company: str, role_id: str) -> list:
-    scores_dir = data_dir / company / "_scores"
-    if not scores_dir.exists():
-        return []
-    idx = _cv_index(data_dir)
-    h8_to_cv = {h[:8]: {"hash": h, "name": meta.get("name", "CV")}
-                for h, meta in idx.get("cvs", {}).items()}
-    results = []
-    for path in sorted(scores_dir.glob(f"{role_id}_*.json")):
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-        except Exception:
-            continue
-        cv_hash_full = data.get("cv_hash")
-        h8 = cv_hash_full[:8] if cv_hash_full else None
-        if not h8:
-            stem = path.stem[len(role_id) + 1:]
-            h8 = stem.split("_")[-1]
-        cv_info = h8_to_cv.get(h8, {"hash": h8, "name": "Unknown CV"})
-        use_notes = "_notes_" in path.stem
-        results.append({
-            "score": data.get("score"),
-            "mode": data.get("mode", "normal"),
-            "use_notes": use_notes,
-            "cv_hash": cv_info["hash"],
-            "cv_name": cv_info["name"],
-            "reasoning": data.get("reasoning", ""),
-        })
-    results.sort(key=lambda x: (x["cv_name"], x["mode"], x["use_notes"]))
-    return results
+# ------------------------------------------------------------------ #
+# Company / slug helpers                                              #
+# ------------------------------------------------------------------ #
 
+def _slugify_company(name: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", name.lower())
+    s = s.encode("ascii", "ignore").decode("ascii")
+    s = re.sub(r"[^\w\s-]", "", s)
+    return re.sub(r"[\s-]+", "_", s).strip("_") or "unknown"
 
-def _save_score(data_dir: Path, company: str, role_id: str,
-                score_data: dict, mode: str, use_notes: bool = False) -> None:
-    path = _score_path(data_dir, company, role_id, mode, use_notes)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    score_data["mode"] = mode
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(score_data, f, indent=2, ensure_ascii=False)
+def _get_or_create_company(user, name_raw: str, description: str = "") -> Company:
+    slug = _slugify_company(name_raw)
+    company, created = Company.objects.get_or_create(
+        user=user,
+        slug=slug,
+        defaults={"name": name_raw, "description": description},
+    )
+    return company
 
 
 # ------------------------------------------------------------------ #
@@ -286,20 +193,33 @@ def _openai_client():
     return OpenAI(api_key=api_key)
 
 
-def _do_score(data_dir: Path, job: dict, client, mode: str = "normal", use_notes: bool = False) -> dict:
-    notes_path = _notes_path(data_dir)
-    cv_path = _selected_cv_path(data_dir)
-    cv_b64 = base64.standard_b64encode(cv_path.read_bytes()).decode()
-    notes = notes_path.read_text(encoding="utf-8").strip() if (use_notes and notes_path.exists()) else ""
+def _do_score(user, job: Job, cv: CV, client, mode: str = "normal",
+              with_notes_text: str = "") -> dict:
+    """Call OpenAI to score a job against a CV. Returns the raw result dict."""
+    data_dir = Path(settings.DATA_DIR) / user.username
+    cv_file  = data_dir / cv.file_path
+    cv_b64   = base64.standard_b64encode(cv_file.read_bytes()).decode()
+
     notes_section = (
-        f"Additional context provided by the candidate (treat as authoritative):\n{notes}\n\n"
-        if notes else ""
+        f"Additional context provided by the candidate (treat as authoritative):\n{with_notes_text}\n\n"
+        if with_notes_text else ""
     )
+    job_dict = {
+        "title":            job.title,
+        "company":          job.company.name or job.company.slug,
+        "location":         job.location,
+        "employment_type":  job.employment_type,
+        "experience_level": job.experience_level,
+        "summary":          job.summary,
+        "description":      job.description,
+        "responsibilities": job.responsibilities,
+        "requirements":     job.requirements,
+        "nice_to_have":     job.nice_to_have,
+        "salary":           job.salary,
+    }
     prompt = (_PROMPT_NORMAL if mode == "normal" else _PROMPT_BRUTAL) + notes_section + (
         "Job description (JSON):\n"
-        + json.dumps({k: v for k, v in job.items() if not k.startswith("_") and k not in
-                      ("role_id", "has_pdf", "score", "score_delta", "all_scores", "added_at_display")},
-                     indent=2, ensure_ascii=False)
+        + json.dumps(job_dict, indent=2, ensure_ascii=False)
     )
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -316,12 +236,22 @@ def _do_score(data_dir: Path, job: dict, client, mode: str = "normal", use_notes
         seed=42,
         timeout=SCORE_TIMEOUT,
     )
-    result = json.loads(response.choices[0].message.content)
-    result["cv_hash"] = _cv_hash(data_dir)
-    result["scored_at"] = datetime.now().isoformat()
-    if notes:
-        result["notes_used"] = notes
-    return result
+    return json.loads(response.choices[0].message.content)
+
+
+def _save_score(job: Job, cv: CV, mode: str, result: dict,
+                with_notes_text: str = "") -> Score:
+    score, _ = Score.objects.update_or_create(
+        job=job, cv=cv, mode=mode,
+        defaults={
+            "score":      result["score"],
+            "reasoning":  result.get("reasoning", ""),
+            "strengths":  result.get("strengths", []),
+            "gaps":       result.get("gaps", []),
+            "with_notes": with_notes_text or None,
+        },
+    )
+    return score
 
 
 def _analyse_jd(text: str, client, url: str = "") -> dict:
@@ -359,160 +289,83 @@ def _url_to_pdf_and_text(url: str):
 
 
 # ------------------------------------------------------------------ #
-# Job/company data helpers                                            #
+# Job creation helper                                                 #
 # ------------------------------------------------------------------ #
 
-def _make_role_id(title: str) -> str:
-    slug = re.sub(r"[^\w\s-]", "", title.lower())
-    slug = re.sub(r"[\s-]+", "_", slug).strip("_")
-    return slug or "role"
+def _create_job(user, job_data: dict, pdf_bytes: bytes | None = None,
+                source_override: str = "") -> Job:
+    """Create Company + Job from analysed job_data dict. Saves PDF if provided."""
+    company_raw = job_data.get("company", "").strip() or "Unknown"
+    description = job_data.pop("company_description", "") or ""
 
+    company = _get_or_create_company(user, company_raw, description)
 
-def _slugify_company(name: str) -> str:
-    s = re.sub(r"[^\w\s-]", "", name.lower())
-    return re.sub(r"[\s-]+", "_", s).strip("_") or "unknown"
+    source = source_override or job_data.get("source", "text")
 
+    job = Job.objects.create(
+        company          = company,
+        title            = job_data.get("title", ""),
+        location         = job_data.get("location", "") or "",
+        employment_type  = job_data.get("employment_type", "") or "",
+        experience_level = job_data.get("experience_level", "") or "",
+        summary          = job_data.get("summary", "") or "",
+        description      = job_data.get("description", "") or "",
+        responsibilities = job_data.get("responsibilities") or [],
+        requirements     = job_data.get("requirements") or [],
+        nice_to_have     = job_data.get("nice_to_have") or [],
+        salary           = str(job_data.get("salary") or ""),
+        source           = source,
+    )
 
-def _load_json(path: Path) -> dict:
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    if pdf_bytes:
+        data_dir = Path(settings.DATA_DIR) / user.username
+        jobs_dir = _jobs_dir(data_dir)
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        pdf_path = jobs_dir / f"{job.id}.pdf"
+        pdf_path.write_bytes(pdf_bytes)
+        job.source_file_path = f"jobs/{job.id}.pdf"
+        job.save(update_fields=["source_file_path"])
 
-
-def _set_archived(path: Path, archived: bool) -> None:
-    data = _load_json(path) if path.exists() else {}
-    if archived:
-        data["archived"] = True
-    else:
-        data.pop("archived", None)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-
-def _get_companies(data_dir: Path, mode: str, use_notes_flag: bool, cv_h: str | None) -> list:
-    companies = []
-    if not data_dir.exists():
-        return companies
-    for company_dir in sorted(data_dir.iterdir()):
-        if not company_dir.is_dir() or company_dir.name.startswith("_"):
-            continue
-        jobs = []
-        for json_file in sorted(company_dir.glob("*.json")):
-            if json_file.name.startswith("_"):
-                continue
-            job = _load_json(json_file)
-            job["role_id"]  = json_file.stem
-            job["has_pdf"]  = json_file.with_suffix(".pdf").exists()
-            job["score"]    = _load_score(data_dir, company_dir.name, json_file.stem,
-                                          mode, use_notes_flag, cv_h)
-            if "added_at" not in job:
-                job["added_at"] = datetime.fromtimestamp(json_file.stat().st_mtime).isoformat()
-            jobs.append(job)
-        if not jobs:
-            continue
-        info_path = company_dir / "_company.json"
-        info = _load_json(info_path) if info_path.exists() else {}
-        # Pre-compute top score for sidebar
-        scored = [j["score"]["score"] for j in jobs
-                  if not j.get("archived") and j.get("score")]
-        companies.append({
-            "name": company_dir.name,
-            "jobs": jobs,
-            "info": info,
-            "archived": bool(info.get("archived")),
-            "top_score": max(scored) if scored else None,
-        })
-    return companies
-
-
-def _get_job(data_dir: Path, company: str, role_id: str, mode: str,
-             use_notes_flag: bool, cv_h: str | None) -> dict:
-    path = data_dir / company / f"{role_id}.json"
-    if not path.exists():
-        raise Http404
-    job = _load_json(path)
-    job["role_id"]   = role_id
-    job["has_pdf"]   = path.with_suffix(".pdf").exists()
-    if "added_at" not in job:
-        job["added_at"] = datetime.fromtimestamp(path.stat().st_mtime).isoformat()
-    job["score"]      = _load_score(data_dir, company, role_id, mode, use_notes_flag, cv_h)
-    delta = None
-    if use_notes_flag and job["score"]:
-        plain = _load_score(data_dir, company, role_id, mode, False, cv_h)
-        if plain is not None:
-            delta = job["score"]["score"] - plain["score"]
-    job["score_delta"] = delta
-    job["all_scores"]  = _all_cv_scores(data_dir, company, role_id)
     return job
 
 
-def _save_job(data_dir: Path, company_raw: str, job_data: dict,
-              pdf_bytes: bytes | None = None) -> tuple[str, str]:
-    company_description = job_data.pop("company_description", None)
-    title = job_data.get("title", "Unknown Role")
-    company = _slugify_company(company_raw)
-    company_dir = data_dir / company
-    company_dir.mkdir(parents=True, exist_ok=True)
-
-    role_id = _make_role_id(title)
-    if (company_dir / f"{role_id}.json").exists():
-        raise ValueError(f'A job titled "{title}" already exists for {company_raw}.')
-
-    job_data.setdefault("added_at", datetime.now().isoformat())
-    if pdf_bytes:
-        (company_dir / f"{role_id}.pdf").write_bytes(pdf_bytes)
-    with open(company_dir / f"{role_id}.json", "w", encoding="utf-8") as f:
-        json.dump(job_data, f, indent=2, ensure_ascii=False)
-
-    info_path = company_dir / "_company.json"
-    if not info_path.exists():
-        info: dict = {"company": company_raw}
-        if company_description:
-            info["description"] = company_description
-        with open(info_path, "w", encoding="utf-8") as f:
-            json.dump(info, f, indent=2, ensure_ascii=False)
-
-    return company, role_id
-
+# ------------------------------------------------------------------ #
+# Redirect helpers                                                    #
+# ------------------------------------------------------------------ #
 
 def _modal_cv_redirect(request):
-    ref = request.META.get("HTTP_REFERER", reverse("jobs_index"))
+    ref  = request.META.get("HTTP_REFERER", reverse("jobs_index"))
     base = ref.split("?")[0]
     return HttpResponseRedirect(base + "?modal=cv")
 
-
 def _modal_add_jobs_redirect(request):
-    ref = request.META.get("HTTP_REFERER", reverse("jobs_index"))
+    ref  = request.META.get("HTTP_REFERER", reverse("jobs_index"))
     base = ref.split("?")[0]
     return HttpResponseRedirect(base + "?modal=add-jobs")
 
 
 # ------------------------------------------------------------------ #
-# Views — settings/mode                                               #
+# Views — settings / mode                                            #
 # ------------------------------------------------------------------ #
 
 @private_view
 def notes_save(request):
-    notes = request.POST.get("notes", "").strip()
-    data_dir = _data_dir(request)
-    data_dir.mkdir(parents=True, exist_ok=True)
-    _notes_path(data_dir).write_text(notes, encoding="utf-8")
-    ref = request.META.get("HTTP_REFERER", reverse("jobs_index"))
-    return HttpResponseRedirect(ref)
+    content = request.POST.get("notes", "").strip()
+    Notes.objects.update_or_create(user=request.user, defaults={"content": content})
+    return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
 
 
 @private_view
 def set_mode(request):
     mode = request.POST.get("mode", "normal")
     request.session["scoring_mode"] = mode if mode in ("normal", "brutal") else "normal"
-    ref = request.META.get("HTTP_REFERER", reverse("jobs_index"))
-    return HttpResponseRedirect(ref)
+    return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
 
 
 @private_view
 def set_notes_mode(request):
     request.session["use_notes"] = request.POST.get("use_notes") == "1"
-    ref = request.META.get("HTTP_REFERER", reverse("jobs_index"))
-    return HttpResponseRedirect(ref)
+    return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
 
 
 # ------------------------------------------------------------------ #
@@ -526,69 +379,77 @@ def help_page(request):
 
 @private_view
 def index(request):
-    data_dir    = _data_dir(request)
-    mode        = _current_mode(request)
-    use_notes_f = _use_notes(request)
-    cv_h        = _cv_hash(data_dir)
-    companies   = _get_companies(data_dir, mode, use_notes_f, cv_h)
-    active   = [c for c in companies if not c["archived"]]
-    archived = [c for c in companies if c["archived"]]
+    mode           = _current_mode(request)
+    selected_cv    = _get_selected_cv(request)
+    companies      = list(
+        Company.objects.filter(user=request.user)
+        .prefetch_related('jobs__scores')
+        .order_by('slug')
+    )
+
+    for company in companies:
+        jobs   = company.jobs.all()
+        scored = []
+        for job in jobs:
+            if not job.archived and selected_cv:
+                s = job.scores.filter(cv=selected_cv, mode=mode).first()
+                if s:
+                    scored.append(s.score)
+        company.top_score = max(scored) if scored else None
+
+    active   = [c for c in companies if not c.archived]
+    archived = [c for c in companies if c.archived]
     return render(request, "jobs/index.html", {
-        "active_companies": active,
+        "active_companies":   active,
         "archived_companies": archived,
     })
 
 
 @private_view
-def company_view(request, company):
-    data_dir = _data_dir(request)
-    company_dir = data_dir / company
-    if not company_dir.is_dir():
-        raise Http404
+def company_view(request, company_slug):
+    company     = get_object_or_404(Company, user=request.user, slug=company_slug)
     mode        = _current_mode(request)
-    use_notes_f = _use_notes(request)
-    cv_h        = _cv_hash(data_dir)
-    info_path = company_dir / "_company.json"
-    company_info = _load_json(info_path) if info_path.exists() else {}
-    jobs = []
-    for json_file in sorted(company_dir.glob("*.json")):
-        if json_file.name.startswith("_"):
-            continue
-        job = _load_json(json_file)
-        job["role_id"] = json_file.stem
-        job["has_pdf"] = json_file.with_suffix(".pdf").exists()
-        job["score"]   = _load_score(data_dir, company, json_file.stem, mode, use_notes_f, cv_h)
-        if "added_at" not in job:
-            job["added_at"] = datetime.fromtimestamp(json_file.stat().st_mtime).isoformat()
-        jobs.append(job)
-    jobs.sort(key=lambda j: (j["score"] or {}).get("score", 0), reverse=True)
-    active   = [j for j in jobs if not j.get("archived")]
-    archived = [j for j in jobs if j.get("archived")]
+    selected_cv = _get_selected_cv(request)
+
+    jobs = list(company.jobs.prefetch_related('scores').order_by('-added_at'))
+    for job in jobs:
+        job.score   = job.scores.filter(cv=selected_cv, mode=mode).first() if selected_cv else None
+        job.has_pdf = bool(job.source_file_path)
+
+    active   = [j for j in jobs if not j.archived]
+    archived = [j for j in jobs if j.archived]
     return render(request, "jobs/company.html", {
-        "company": company,
-        "company_info": company_info,
-        "active_jobs": active,
+        "company":      company,
+        "active_jobs":  active,
         "archived_jobs": archived,
     })
 
 
 @private_view
-def job_view(request, company, role_id):
-    data_dir    = _data_dir(request)
+def job_view(request, company_slug, job_id):
+    company     = get_object_or_404(Company, user=request.user, slug=company_slug)
+    job         = get_object_or_404(Job, company=company, id=job_id)
     mode        = _current_mode(request)
-    use_notes_f = _use_notes(request)
-    cv_h        = _cv_hash(data_dir)
-    job = _get_job(data_dir, company, role_id, mode, use_notes_f, cv_h)
+    selected_cv = _get_selected_cv(request)
+
+    job.score   = job.scores.filter(cv=selected_cv, mode=mode).first() if selected_cv else None
+    job.has_pdf = bool(job.source_file_path)
+    job.all_scores = list(job.scores.select_related('cv').order_by('cv__name', 'mode'))
+
     return render(request, "jobs/job.html", {"company": company, "job": job})
 
 
 @private_view
-def job_pdf(request, company, role_id):
-    data_dir = _data_dir(request)
-    path = data_dir / company / f"{role_id}.pdf"
-    if not path.exists():
+def job_pdf(request, company_slug, job_id):
+    company = get_object_or_404(Company, user=request.user, slug=company_slug)
+    job     = get_object_or_404(Job, company=company, id=job_id)
+    if not job.source_file_path:
         raise Http404
-    return FileResponse(open(path, "rb"), content_type="application/pdf")
+    data_dir = _data_dir(request)
+    p = data_dir / job.source_file_path
+    if not p.exists():
+        raise Http404
+    return FileResponse(open(p, "rb"), content_type="application/pdf")
 
 
 # ------------------------------------------------------------------ #
@@ -601,73 +462,70 @@ def cv_upload(request):
     if not f or not f.name.lower().endswith(".pdf"):
         messages.warning(request, "Please upload a PDF file.")
         return _modal_cv_redirect(request)
+
     pdf_bytes = f.read()
     h = hashlib.sha256(pdf_bytes + f.name.encode()).hexdigest()
-    data_dir = _data_dir(request)
-    _cvs_dir(data_dir).mkdir(parents=True, exist_ok=True)
-    idx = _cv_index(data_dir)
-    if h in idx.get("cvs", {}):
+
+    if CV.objects.filter(user=request.user, hash=h).exists():
         messages.warning(request, "This CV has already been uploaded.")
         return _modal_cv_redirect(request)
-    (_cvs_dir(data_dir) / f"{h}.pdf").write_bytes(pdf_bytes)
+
+    data_dir = _data_dir(request)
+    _cvs_dir(data_dir).mkdir(parents=True, exist_ok=True)
+    file_path = f"_cvs/{h}.pdf"
+    (data_dir / file_path).write_bytes(pdf_bytes)
+
     name = Path(f.name).stem.replace("_", " ").replace("-", " ").strip() or "CV"
-    idx.setdefault("cvs", {})[h] = {"name": name, "uploaded": datetime.now().isoformat()}
-    idx["selected"] = h
-    _save_cv_index(data_dir, idx)
+    cv = CV.objects.create(user=request.user, hash=h, name=name, file_path=file_path)
+    request.session["selected_cv_id"] = str(cv.id)
     return _modal_cv_redirect(request)
 
 
 @private_view
-def cv_select(request, cv_hash):
-    data_dir = _data_dir(request)
-    idx = _cv_index(data_dir)
-    if cv_hash in idx.get("cvs", {}) and (_cvs_dir(data_dir) / f"{cv_hash}.pdf").exists():
-        idx["selected"] = cv_hash
-        _save_cv_index(data_dir, idx)
+def cv_select(request, cv_id):
+    cv = get_object_or_404(CV, id=cv_id, user=request.user)
+    request.session["selected_cv_id"] = str(cv.id)
     return _modal_cv_redirect(request)
 
 
 @private_view
-def cv_rename(request, cv_hash):
+def cv_rename(request, cv_id):
     name = request.POST.get("name", "").strip() or "CV"
-    data_dir = _data_dir(request)
-    idx = _cv_index(data_dir)
-    if cv_hash in idx.get("cvs", {}):
-        idx["cvs"][cv_hash]["name"] = name
-        _save_cv_index(data_dir, idx)
-    ref = request.META.get("HTTP_REFERER", reverse("jobs_index"))
-    return HttpResponseRedirect(ref)
+    CV.objects.filter(id=cv_id, user=request.user).update(name=name)
+    return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
 
 
 @private_view
-def cv_delete(request, cv_hash):
+def cv_delete(request, cv_id):
+    cv = get_object_or_404(CV, id=cv_id, user=request.user)
     data_dir = _data_dir(request)
-    idx = _cv_index(data_dir)
-    cvs = idx.get("cvs", {})
-    if cv_hash in cvs:
-        p = _cvs_dir(data_dir) / f"{cv_hash}.pdf"
-        if p.exists():
-            p.unlink()
-        del cvs[cv_hash]
-        if idx.get("selected") == cv_hash:
-            idx["selected"] = next(iter(cvs), None)
-        _save_cv_index(data_dir, idx)
+    p = data_dir / cv.file_path
+    if p.exists():
+        p.unlink()
+    if request.session.get("selected_cv_id") == str(cv.id):
+        next_cv = CV.objects.filter(user=request.user).exclude(id=cv.id).first()
+        request.session["selected_cv_id"] = str(next_cv.id) if next_cv else None
+    cv.delete()
     return _modal_cv_redirect(request)
 
 
 @private_view
 def cv_view(request):
+    cv = _get_selected_cv(request)
+    if not cv:
+        raise Http404
     data_dir = _data_dir(request)
-    p = _selected_cv_path(data_dir)
-    if not p:
+    p = data_dir / cv.file_path
+    if not p.exists():
         raise Http404
     return FileResponse(open(p, "rb"), content_type="application/pdf")
 
 
 @private_view
-def cv_view_specific(request, cv_hash):
+def cv_view_specific(request, cv_id):
+    cv = get_object_or_404(CV, id=cv_id, user=request.user)
     data_dir = _data_dir(request)
-    p = _cvs_dir(data_dir) / f"{cv_hash}.pdf"
+    p = data_dir / cv.file_path
     if not p.exists():
         raise Http404
     return FileResponse(open(p, "rb"), content_type="application/pdf")
@@ -698,7 +556,7 @@ def add_job_url(request):
         if fname.endswith(".pdf"):
             pdf_bytes = pdf_file.read()
             from pypdf import PdfReader
-            reader = PdfReader(io.BytesIO(pdf_bytes))
+            reader  = PdfReader(io.BytesIO(pdf_bytes))
             jd_text = "\n".join(p.extract_text() or "" for p in reader.pages).strip()
         elif fname.endswith(".txt"):
             jd_text = pdf_file.read().decode("utf-8", errors="replace").strip()
@@ -715,21 +573,19 @@ def add_job_url(request):
 
     job_data = _analyse_jd(jd_text, client, url=url)
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
-        messages.warning(request, "The analysis returned no job content. The URL or file may not contain a job posting.")
+        messages.warning(request, "The analysis returned no job content.")
         return _modal_add_jobs_redirect(request)
-    resolved = company_raw or job_data.get("company", "").strip()
-    if not resolved:
+
+    if company_raw:
+        job_data["company"] = company_raw
+
+    if not job_data.get("company", "").strip():
         messages.warning(request, "Could not determine the company name. Please fill in the Company field.")
         return _modal_add_jobs_redirect(request)
-    job_data["company"] = resolved
-    job_data["source"]  = "url" if url else "manual"
-    try:
-        data_dir = _data_dir(request)
-        company, role_id = _save_job(data_dir, resolved, job_data, pdf_bytes)
-    except ValueError as e:
-        messages.warning(request, str(e))
-        return _modal_add_jobs_redirect(request)
-    return HttpResponseRedirect(reverse("jobs_job", args=[company, role_id]))
+
+    source = url if url else "file"
+    job = _create_job(request.user, job_data, pdf_bytes=pdf_bytes, source_override=source)
+    return HttpResponseRedirect(reverse("jobs_job", args=[job.company.slug, str(job.id)]))
 
 
 @private_view
@@ -751,20 +607,21 @@ def add_job_text(request):
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
         messages.warning(request, "The analysis returned no job content.")
         return _modal_add_jobs_redirect(request)
-    resolved = company_raw or job_data.get("company", "").strip()
-    if not resolved:
+
+    if company_raw:
+        job_data["company"] = company_raw
+
+    if not job_data.get("company", "").strip():
         messages.warning(request, "Could not determine the company name. Please fill in the Company field.")
         return _modal_add_jobs_redirect(request)
-    job_data["company"] = resolved
-    job_data["source"]  = "text"
-    try:
-        data_dir = _data_dir(request)
-        company, role_id = _save_job(data_dir, resolved, job_data)
-    except ValueError as e:
-        messages.warning(request, str(e))
-        return _modal_add_jobs_redirect(request)
-    return HttpResponseRedirect(reverse("jobs_job", args=[company, role_id]))
 
+    job = _create_job(request.user, job_data, source_override="text")
+    return HttpResponseRedirect(reverse("jobs_job", args=[job.company.slug, str(job.id)]))
+
+
+# ------------------------------------------------------------------ #
+# Views — Scraping                                                    #
+# ------------------------------------------------------------------ #
 
 @private_view
 def scrape_categories(request):
@@ -772,10 +629,10 @@ def scrape_categories(request):
         data = json.loads(request.body)
     except Exception:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
-    board   = data.get("board", "lever")
-    company = data.get("company", "").strip()
-    url     = data.get("url", "").strip()
-    data_dir = _data_dir(request)
+
+    board    = data.get("board", "lever")
+    company  = data.get("company", "").strip()
+    url      = data.get("url", "").strip()
 
     if board == "lever":
         try:
@@ -786,7 +643,7 @@ def scrape_categories(request):
             return JsonResponse({"error": "Company slug is required."}, status=400)
         base_url = f"https://jobs.lever.co/{company}"
         try:
-            jobs = LeverScraper().setup(data_dir).fetch_jobs(base_url)
+            jobs = LeverScraper().setup(Path(settings.DATA_DIR)).fetch_jobs(base_url)
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
     else:
@@ -803,20 +660,19 @@ def scrape_categories(request):
         base_url = url or "unknown"
         multi_company = bool(data.get("multi_company", False))
         try:
-            jobs = GenericScraper().setup(data_dir, client, multi_company=multi_company).fetch_jobs(
+            jobs = GenericScraper().setup(Path(settings.DATA_DIR), client,
+                                          multi_company=multi_company).fetch_jobs(
                 base_url, html_src=html_src or None)
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
 
+    # Mark jobs already in the DB
     for job in jobs:
         job_url = job.get("url", "")
         if job_url:
-            role_id = hashlib.sha256(job_url.encode()).hexdigest()
-            job["exists"] = any(
-                (d / f"{role_id}.json").exists()
-                for d in data_dir.iterdir()
-                if d.is_dir() and not d.name.startswith("_")
-            ) if data_dir.exists() else False
+            job["exists"] = Job.objects.filter(
+                company__user=request.user, source=job_url
+            ).exists()
     return JsonResponse({"jobs": jobs, "base_url": base_url})
 
 
@@ -826,7 +682,6 @@ def scrape_confirm(request):
         data = json.loads(request.body)
     except Exception:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
-    import uuid
     limit = data.get("limit")
     jobs  = data.get("jobs") or []
     if limit:
@@ -858,6 +713,10 @@ def scrape_stream(request):
     multi_company  = params.get("multi_company", False)
     client         = _openai_client()
     data_dir       = _data_dir(request)
+    user           = request.user
+
+    # Pre-generate UUIDs and PDF output paths for each job
+    jobs_dir = _jobs_dir(data_dir)
 
     def _slugify(name: str) -> str:
         import unicodedata
@@ -871,32 +730,86 @@ def scrape_stream(request):
         if not total:
             yield f"data: {json.dumps({'done': True, 'total': 0})}\n\n"
             return
+
         if board == "lever":
             from lever_scraper import LeverScraper
-            scraper = LeverScraper().setup(data_dir, client, timeout=timeout, openai_timeout=openai_timeout)
-            # Pass company=None so the LLM-extracted name determines the folder slug.
-            # Pre-populate each stub with the user-typed slug as fallback (used when OpenAI is off).
-            scrape_jobs = [{"company": company_raw, **j} for j in jobs]
+            scraper = LeverScraper().setup(data_dir, client, timeout=timeout,
+                                           openai_timeout=openai_timeout)
+            scrape_jobs = []
+            for j in jobs:
+                job_uuid = str(uuid_module.uuid4())
+                scrape_jobs.append({
+                    "company":         company_raw,
+                    "uuid":            job_uuid,
+                    "pdf_output_path": str(jobs_dir / f"{job_uuid}.pdf"),
+                    **j,
+                })
             fixed_company = None
             display_name  = None
         else:
             from generic_scraper import GenericScraper
             scraper = GenericScraper().setup(data_dir, client, timeout=timeout,
-                                             openai_timeout=openai_timeout, multi_company=multi_company)
-            scrape_jobs   = jobs
+                                             openai_timeout=openai_timeout,
+                                             multi_company=multi_company)
+            scrape_jobs = []
+            for j in jobs:
+                job_uuid = str(uuid_module.uuid4())
+                scrape_jobs.append({
+                    "uuid":            job_uuid,
+                    "pdf_output_path": str(jobs_dir / f"{job_uuid}.pdf"),
+                    **j,
+                })
             fixed_company = _slugify(company_raw) if company_raw else None
             display_name  = company_raw or None
-        last_company = fixed_company or company_raw
+
+        last_company_slug = fixed_company or _slugify(company_raw) if company_raw else None
+
         for event in scraper.scrape_iter(scrape_jobs, fixed_company, company_name=display_name):
             event["total"] = total
-            if event.get("company"):
-                last_company = event["company"]
+
+            # Create Company + Job models from completed events
+            if not event.get("starting") and not event.get("error"):
+                job_data  = event.get("job_data") or {}
+                job_uuid  = event.get("uuid")
+                if job_data and job_uuid:
+                    jobs_dir.mkdir(parents=True, exist_ok=True)
+                    extracted_company = job_data.get("company", "").strip()
+                    fallback          = company_raw if board == "lever" else ""
+                    company_name_raw  = extracted_company or fallback or "Unknown"
+                    description       = job_data.pop("company_description", "") or ""
+
+                    company_obj = _get_or_create_company(user, company_name_raw, description)
+                    last_company_slug = company_obj.slug
+                    event["company"]  = company_obj.slug
+
+                    pdf_path = jobs_dir / f"{job_uuid}.pdf"
+                    try:
+                        Job.objects.get_or_create(
+                            id=job_uuid,
+                            defaults={
+                                "company":          company_obj,
+                                "title":            job_data.get("title", ""),
+                                "location":         job_data.get("location", "") or "",
+                                "employment_type":  job_data.get("employment_type", "") or "",
+                                "experience_level": job_data.get("experience_level", "") or "",
+                                "summary":          job_data.get("summary", "") or "",
+                                "description":      job_data.get("description", "") or "",
+                                "responsibilities": job_data.get("responsibilities") or [],
+                                "requirements":     job_data.get("requirements") or [],
+                                "nice_to_have":     job_data.get("nice_to_have") or [],
+                                "salary":           str(job_data.get("salary") or ""),
+                                "source":           event.get("url", ""),
+                                "source_file_path": f"jobs/{job_uuid}.pdf" if pdf_path.exists() else "",
+                            },
+                        )
+                    except Exception as e:
+                        log.error("Failed to create Job model for %s: %s", job_uuid, e)
+
             yield f"data: {json.dumps(event)}\n\n"
+
         done_payload: dict = {"done": True, "total": total}
-        if fixed_company:
-            done_payload["company"] = fixed_company
-        elif last_company:
-            done_payload["company"] = last_company
+        if last_company_slug:
+            done_payload["company"] = last_company_slug
         yield f"data: {json.dumps(done_payload)}\n\n"
 
     response = StreamingHttpResponse(generate(), content_type="text/event-stream")
@@ -910,69 +823,68 @@ def scrape_stream(request):
 # ------------------------------------------------------------------ #
 
 @private_view
-def score_one(request, company, role_id):
-    data_dir = _data_dir(request)
-    if not _selected_cv_path(data_dir):
-        messages.warning(request, "No CV uploaded.")
-        ref = request.META.get("HTTP_REFERER", reverse("jobs_index"))
-        return HttpResponseRedirect(ref)
+def score_one(request, company_slug, job_id):
+    company     = get_object_or_404(Company, user=request.user, slug=company_slug)
+    job         = get_object_or_404(Job, company=company, id=job_id)
+    selected_cv = _get_selected_cv(request)
+    if not selected_cv:
+        messages.warning(request, "No CV selected.")
+        return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
     client = _openai_client()
     if not client:
         messages.warning(request, "OPENAI_KEY is not configured.")
-        ref = request.META.get("HTTP_REFERER", reverse("jobs_index"))
-        return HttpResponseRedirect(ref)
-    mode        = _current_mode(request)
-    use_notes_f = _use_notes(request)
-    cv_h        = _cv_hash(data_dir)
-    job = _get_job(data_dir, company, role_id, mode, use_notes_f, cv_h)
-    result = _do_score(data_dir, job, client, mode, use_notes_f)
-    _save_score(data_dir, company, role_id, result, mode, use_notes_f)
-    ref = request.META.get("HTTP_REFERER", reverse("jobs_job", args=[company, role_id]))
-    return HttpResponseRedirect(ref)
+        return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
+
+    mode           = _current_mode(request)
+    with_notes_txt = _get_notes_text(request) if _use_notes(request) else ""
+
+    result = _do_score(request.user, job, selected_cv, client, mode, with_notes_txt)
+    _save_score(job, selected_cv, mode, result, with_notes_txt)
+
+    return HttpResponseRedirect(request.META.get(
+        "HTTP_REFERER", reverse("jobs_job", args=[company_slug, str(job.id)])
+    ))
 
 
 @private_view
-def score_company_stream(request, company):
-    data_dir = _data_dir(request)
-    if not _selected_cv_path(data_dir):
-        return HttpResponse("No CV uploaded", status=400)
+def score_company_stream(request, company_slug):
+    company     = get_object_or_404(Company, user=request.user, slug=company_slug)
+    selected_cv = _get_selected_cv(request)
+    if not selected_cv:
+        return HttpResponse("No CV selected", status=400)
     client = _openai_client()
     if not client:
         return HttpResponse("OPENAI_KEY not set", status=400)
-    company_dir = data_dir / company
-    if not company_dir.is_dir():
-        raise Http404
-    mode        = _current_mode(request)
-    use_notes_f = _use_notes(request)
-    cv_h        = _cv_hash(data_dir)
 
-    to_score = [
-        f for f in sorted(company_dir.glob("*.json"))
-        if not f.name.startswith("_") and _load_score(data_dir, company, f.stem,
-                                                        mode, use_notes_f, cv_h) is None
-    ]
+    mode           = _current_mode(request)
+    with_notes_txt = _get_notes_text(request) if _use_notes(request) else ""
+    user           = request.user
+
+    scored_ids = Score.objects.filter(
+        job__company=company, cv=selected_cv, mode=mode
+    ).values_list("job_id", flat=True)
+
+    to_score = list(
+        company.jobs.filter(archived=False).exclude(id__in=scored_ids).order_by("added_at")
+    )
     total = len(to_score)
 
     def generate():
-        failed = 0
-        for i, json_file in enumerate(to_score, 1):
-            job = _load_json(json_file)
-            title = job.get("title", "?")
-            yield f"data: {json.dumps({'current': i, 'total': total, 'title': title})}\n\n"
+        for i, job in enumerate(to_score, 1):
+            yield f"data: {json.dumps({'current': i, 'total': total, 'title': job.title})}\n\n"
             last_error = None
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
-                    result = _do_score(data_dir, job, client, mode, use_notes_f)
-                    _save_score(data_dir, company, json_file.stem, result, mode, use_notes_f)
+                    result = _do_score(user, job, selected_cv, client, mode, with_notes_txt)
+                    _save_score(job, selected_cv, mode, result, with_notes_txt)
                     last_error = None
                     break
                 except Exception as e:
                     last_error = str(e)
                     if attempt < MAX_RETRIES:
-                        yield f"data: {json.dumps({'current': i, 'total': total, 'title': title, 'retry': attempt, 'error': last_error})}\n\n"
+                        yield f"data: {json.dumps({'current': i, 'total': total, 'title': job.title, 'retry': attempt, 'error': last_error})}\n\n"
             if last_error:
-                failed += 1
-                yield f"data: {json.dumps({'current': i, 'total': total, 'title': title, 'failed': True, 'error': last_error})}\n\n"
+                yield f"data: {json.dumps({'current': i, 'total': total, 'title': job.title, 'failed': True, 'error': last_error})}\n\n"
         yield f"data: {json.dumps({'done': True})}\n\n"
 
     response = StreamingHttpResponse(generate(), content_type="text/event-stream")
@@ -982,63 +894,64 @@ def score_company_stream(request, company):
 
 
 @private_view
-def clear_scores(request, company):
-    data_dir = _data_dir(request)
-    scores_dir = data_dir / company / "_scores"
-    if scores_dir.is_dir():
-        for f in scores_dir.glob("*.json"):
-            f.unlink()
-    return HttpResponseRedirect(reverse("jobs_company", args=[company]))
+def clear_scores(request, company_slug):
+    company = get_object_or_404(Company, user=request.user, slug=company_slug)
+    Score.objects.filter(job__company=company).delete()
+    return HttpResponseRedirect(reverse("jobs_company", args=[company_slug]))
 
 
 # ------------------------------------------------------------------ #
-# Views — archive / delete                                            #
+# Views — archive / delete                                           #
 # ------------------------------------------------------------------ #
 
 @private_view
-def delete_job(request, company, role_id):
-    data_dir = _data_dir(request)
-    base = data_dir / company
-    for ext in (".json", ".pdf"):
-        p = base / f"{role_id}{ext}"
+def delete_job(request, company_slug, job_id):
+    company = get_object_or_404(Company, user=request.user, slug=company_slug)
+    job     = get_object_or_404(Job, company=company, id=job_id)
+
+    if job.source_file_path:
+        data_dir = _data_dir(request)
+        p = data_dir / job.source_file_path
         if p.exists():
             p.unlink()
-    scores_dir = base / "_scores"
-    if scores_dir.is_dir():
-        for f in scores_dir.glob(f"{role_id}_*.json"):
-            f.unlink()
-    remaining = [f for f in base.glob("*.json") if not f.name.startswith("_")]
-    if not remaining:
-        shutil.rmtree(base)
+
+    job.delete()
+
+    if not company.jobs.exists():
+        company.delete()
         return HttpResponseRedirect(reverse("jobs_index"))
-    return HttpResponseRedirect(reverse("jobs_company", args=[company]))
+    return HttpResponseRedirect(reverse("jobs_company", args=[company_slug]))
 
 
 @private_view
-def archive_company(request, company):
-    data_dir = _data_dir(request)
-    _set_archived(data_dir / company / "_company.json", True)
-    ref = request.META.get("HTTP_REFERER", reverse("jobs_index"))
-    return HttpResponseRedirect(ref)
+def archive_company(request, company_slug):
+    company = get_object_or_404(Company, user=request.user, slug=company_slug)
+    company.archived = True
+    company.save(update_fields=["archived"])
+    return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
 
 
 @private_view
-def unarchive_company(request, company):
-    data_dir = _data_dir(request)
-    _set_archived(data_dir / company / "_company.json", False)
-    ref = request.META.get("HTTP_REFERER", reverse("jobs_index"))
-    return HttpResponseRedirect(ref)
+def unarchive_company(request, company_slug):
+    company = get_object_or_404(Company, user=request.user, slug=company_slug)
+    company.archived = False
+    company.save(update_fields=["archived"])
+    return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
 
 
 @private_view
-def archive_job(request, company, role_id):
-    data_dir = _data_dir(request)
-    _set_archived(data_dir / company / f"{role_id}.json", True)
-    return HttpResponseRedirect(reverse("jobs_company", args=[company]))
+def archive_job(request, company_slug, job_id):
+    company = get_object_or_404(Company, user=request.user, slug=company_slug)
+    job     = get_object_or_404(Job, company=company, id=job_id)
+    job.archived = True
+    job.save(update_fields=["archived"])
+    return HttpResponseRedirect(reverse("jobs_company", args=[company_slug]))
 
 
 @private_view
-def unarchive_job(request, company, role_id):
-    data_dir = _data_dir(request)
-    _set_archived(data_dir / company / f"{role_id}.json", False)
-    return HttpResponseRedirect(reverse("jobs_company", args=[company]))
+def unarchive_job(request, company_slug, job_id):
+    company = get_object_or_404(Company, user=request.user, slug=company_slug)
+    job     = get_object_or_404(Job, company=company, id=job_id)
+    job.archived = False
+    job.save(update_fields=["archived"])
+    return HttpResponseRedirect(reverse("jobs_company", args=[company_slug]))
