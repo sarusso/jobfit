@@ -165,14 +165,15 @@ class UsageLog(models.Model):
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user        = models.ForeignKey('User', on_delete=models.CASCADE, related_name='usage_logs')
     amount      = models.DecimalField(max_digits=10, decimal_places=4)  # positive cost in USD
-    description = models.CharField(max_length=255)
+    description = models.CharField(max_length=100)                      # macro category, e.g. "CV scoring"
+    detail      = models.CharField(max_length=255, blank=True)          # internal: provider/model/tokens
     created_at  = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'-${self.amount} — {self.description} ({self.user.email})'
+        return f'-${self.amount} — {self.description} [{self.detail}] ({self.user.email})'
 
 
 class Score(models.Model):

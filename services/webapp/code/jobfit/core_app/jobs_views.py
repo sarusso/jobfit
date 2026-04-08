@@ -48,7 +48,7 @@ def _get_balance(user) -> Decimal:
         return Decimal('0')
 
 
-def _track_usage(user, provider: str, model: str, usage):
+def _track_usage(user, provider: str, model: str, usage, description: str = ""):
     """Record LLM token usage and deduct cost from TopUps (FIFO, soonest-expiring first).
 
     usage: object with .prompt_tokens / .completion_tokens, or a plain dict.
@@ -126,7 +126,8 @@ def _track_usage(user, provider: str, model: str, usage):
             UsageLog.objects.create(
                 user=user,
                 amount=cost,
-                description=f"{provider} {model} — {total_tokens:,} tokens",
+                description=description,
+                detail=f"{provider} {model} — {total_tokens:,} tokens",
             )
 
 
@@ -702,7 +703,7 @@ def add_job_url(request):
             return _modal_add_jobs_redirect(request)
 
     job_data, llm_usage = _analyse_jd(jd_text, client, url=url)
-    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage)
+    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage, "Job import")
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
         messages.warning(request, "The analysis returned no job content.")
         return _modal_add_jobs_redirect(request)
@@ -739,7 +740,7 @@ def add_job_text(request):
         return _modal_add_jobs_redirect(request)
 
     job_data, llm_usage = _analyse_jd(text, client, url=url)
-    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage)
+    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage, "Job import")
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
         messages.warning(request, "The analysis returned no job content.")
         return _modal_add_jobs_redirect(request)
@@ -794,7 +795,7 @@ def extract_pdf_jobs(request):
         log.error("PDF extraction failed: %s", e)
         return JsonResponse({"error": str(e)}, status=500)
 
-    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage)
+    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage, "Job import")
 
     stubs = [
         {
@@ -852,7 +853,7 @@ def scrape_categories(request):
             jobs = scraper.fetch_jobs(base_url, html_src=html_src or None)
             fetch_usage = getattr(scraper, "_fetch_usage", None)
             if fetch_usage:
-                _track_usage(request.user, "openai", "gpt-4o-mini", fetch_usage)
+                _track_usage(request.user, "openai", "gpt-4o-mini", fetch_usage, "Job import")
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
 
@@ -1005,7 +1006,7 @@ def scrape_stream(request):
                     break
                 llm_usage = event.get("llm_usage")
                 if llm_usage:
-                    _track_usage(user, "openai", "gpt-4o-mini", llm_usage)
+                    _track_usage(user, "openai", "gpt-4o-mini", llm_usage, "Job import")
                 job_data  = event.get("job_data") or {}
                 job_uuid  = event.get("uuid")
                 if job_data and job_uuid:
@@ -1081,7 +1082,7 @@ def score_one(request, company_slug, job_id):
     with_notes_txt = _get_notes_text(request) if _use_notes(request) else ""
 
     result, llm_usage = _do_score(request.user, job, selected_cv, client, mode, with_notes_txt)
-    _track_usage(request.user, "openai", "gpt-4o", llm_usage)
+    _track_usage(request.user, "openai", "gpt-4o", llm_usage, "CV scoring")
     _save_score(job, selected_cv, mode, result, with_notes_txt)
 
     return HttpResponseRedirect(request.META.get(
@@ -1122,7 +1123,7 @@ def score_company_stream(request, company_slug):
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
                     result, llm_usage = _do_score(user, job, selected_cv, client, mode, with_notes_txt)
-                    _track_usage(user, "openai", "gpt-4o", llm_usage)
+                    _track_usage(user, "openai", "gpt-4o", llm_usage, "CV scoring")
                     _save_score(job, selected_cv, mode, result, with_notes_txt)
                     last_error = None
                     break
