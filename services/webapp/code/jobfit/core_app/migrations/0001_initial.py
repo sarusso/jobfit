@@ -1,7 +1,7 @@
 import uuid
 import django.contrib.auth.models
 import django.contrib.auth.validators
-import django.contrib.postgres.fields
+import jobfit.core_app.fields
 import django.db.models.deletion
 import django.utils.timezone
 from django.conf import settings
@@ -75,9 +75,9 @@ class Migration(migrations.Migration):
                 ('experience_level', models.CharField(blank=True, max_length=100)),
                 ('summary', models.TextField(blank=True)),
                 ('description', models.TextField(blank=True)),
-                ('responsibilities', django.contrib.postgres.fields.JSONField(blank=True, default=list)),
-                ('requirements', django.contrib.postgres.fields.JSONField(blank=True, default=list)),
-                ('nice_to_have', django.contrib.postgres.fields.JSONField(blank=True, default=list)),
+                ('responsibilities', jobfit.core_app.fields.JSONField(blank=True, default=list)),
+                ('requirements', jobfit.core_app.fields.JSONField(blank=True, default=list)),
+                ('nice_to_have', jobfit.core_app.fields.JSONField(blank=True, default=list)),
                 ('salary', models.CharField(blank=True, max_length=255)),
                 ('source', models.CharField(blank=True, max_length=2048)),
                 ('source_file_path', models.CharField(blank=True, max_length=500)),
@@ -124,8 +124,8 @@ class Migration(migrations.Migration):
                 ('with_notes', models.TextField(blank=True, null=True)),
                 ('score', models.IntegerField()),
                 ('reasoning', models.TextField(blank=True)),
-                ('strengths', django.contrib.postgres.fields.JSONField(blank=True, default=list)),
-                ('gaps', django.contrib.postgres.fields.JSONField(blank=True, default=list)),
+                ('strengths', jobfit.core_app.fields.JSONField(blank=True, default=list)),
+                ('gaps', jobfit.core_app.fields.JSONField(blank=True, default=list)),
                 ('cv', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='scores', to='core_app.CV')),
                 ('job', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='scores', to='core_app.Job')),
             ],

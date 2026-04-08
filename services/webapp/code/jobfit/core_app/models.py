@@ -3,7 +3,7 @@ import logging
 from decimal import Decimal
 
 from django.contrib.auth.models import AbstractUser
-from django.contrib.postgres.fields import JSONField
+from .fields import JSONField
 from django.db import models
 from django.db.models import Q, Sum
 from django.utils import timezone

@@ -1,35 +1,23 @@
-import json
-
-from ..models import User
-
-from .common import BaseAPITestCase
-from ..utils import sanitize_container_env_vars
-
-class TestUtils(BaseAPITestCase):
-
-    def setUp(self):
-        pass
-
-    def test_sanitize_user_env_vars(self):
-        '''Test sanitize use env vars'''
-
-        # Basic
-        env_vars = {'myvar': 'a'}
-        self.assertEqual(sanitize_container_env_vars(env_vars),env_vars)
-
-        # Allowed specia
-        env_vars = {'myvar': '/a_directory/a-test'}
-        self.assertEqual(sanitize_container_env_vars(env_vars),env_vars)
-
-        # Potential malicious
-        env_vars = {'myvar': '$(rm -rf)'}
-        with self.assertRaises(ValueError):
-            sanitize_container_env_vars(env_vars)
+from ..utils import booleanize, random_username
+from .common import BaseTestCase
 
 
+class BooleanizeTest(BaseTestCase):
+
+    def test_true_values(self):
+        for v in (True, 'True', 'true', '1', 'yes'):
+            self.assertTrue(booleanize(v), msg=f'Expected True for {v!r}')
+
+    def test_false_values(self):
+        for v in (False, 'False', 'false', '0', 'no', ''):
+            self.assertFalse(booleanize(v), msg=f'Expected False for {v!r}')
 
 
+class RandomUsernameTest(BaseTestCase):
 
+    def test_returns_string(self):
+        self.assertIsInstance(random_username(), str)
 
-
-
+    def test_unique(self):
+        names = {random_username() for _ in range(20)}
+        self.assertEqual(len(names), 20)

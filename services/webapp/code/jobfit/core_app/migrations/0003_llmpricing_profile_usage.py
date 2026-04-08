@@ -1,4 +1,4 @@
-import django.contrib.postgres.fields
+import jobfit.core_app.fields
 from django.db import migrations, models
 
 
@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='profile',
             name='usage',
-            field=django.contrib.postgres.fields.JSONField(blank=True, default=dict),
+            field=jobfit.core_app.fields.JSONField(blank=True, default=dict),
         ),
         migrations.CreateModel(
             name='LLMPricing',
@@ -20,7 +20,7 @@ class Migration(migrations.Migration):
                 ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('provider', models.CharField(max_length=50)),
                 ('model', models.CharField(max_length=100)),
-                ('price', django.contrib.postgres.fields.JSONField()),
+                ('price', jobfit.core_app.fields.JSONField()),
                 ('superseded_at', models.DateTimeField(blank=True, null=True)),
             ],
             options={
