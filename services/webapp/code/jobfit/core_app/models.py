@@ -31,9 +31,28 @@ class Profile(models.Model):
     email_updates         = models.BooleanField(default=False)
     last_accepted_terms   = models.FloatField('Last accepted TOS', default=0)
     last_accepted_privacy = models.FloatField('Last accepted Privacy Policy', default=0)
+    usage                 = JSONField(default=dict, blank=True)
 
     def __str__(self):
         return f'Profile of user "{self.user.email}"'
+
+
+class LLMPricing(models.Model):
+    provider      = models.CharField(max_length=50)   # e.g. "openai"
+    model         = models.CharField(max_length=100)  # e.g. "gpt-4o"
+    # price keys match OpenAI usage field names, values are USD per 1M tokens
+    # e.g. {"completion_tokens": 10.0, "prompt_tokens": 2.5}
+    price         = JSONField()
+    superseded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-id']
+
+    def pricing_key(self):
+        return "-".join(str(self.price[k]) for k in sorted(self.price))
+
+    def __str__(self):
+        return f'{self.provider}/{self.model} [{self.pricing_key()}]{"" if self.superseded_at is None else " (superseded)"}'
 
 
 class Company(models.Model):

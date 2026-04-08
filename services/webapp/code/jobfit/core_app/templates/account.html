@@ -147,6 +147,11 @@
             <div class="account-value">{{ data.profile.plan }}</div>
           </div>
 
+          <div class="account-row">
+            <div class="account-label">Total spending</div>
+            <div class="account-value">${{ data.total_cost|floatformat:4 }}</div>
+          </div>
+
         </form>
       </div>
     </div>

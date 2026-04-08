@@ -27,12 +27,49 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
 from .decorators import private_view
-from .models import CV, Company, Job, Notes, Score
+from .models import CV, Company, Job, Notes, Score, LLMPricing, Profile
 
 log = logging.getLogger(__name__)
 
 SCORE_TIMEOUT = 60
 MAX_RETRIES   = 3
+
+
+# ------------------------------------------------------------------ #
+# LLM usage tracking                                                 #
+# ------------------------------------------------------------------ #
+
+def _track_usage(user, provider: str, model: str, usage):
+    """Atomically record LLM token usage on the user's Profile.
+
+    usage: object with .prompt_tokens and .completion_tokens,
+           or a plain dict with the same keys.
+    Falls back to key "0-0" if no active LLMPricing row exists.
+    """
+    from django.db import transaction
+
+    if isinstance(usage, dict):
+        prompt_tokens     = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+    else:
+        prompt_tokens     = usage.prompt_tokens
+        completion_tokens = usage.completion_tokens
+
+    pricing = LLMPricing.objects.filter(
+        provider=provider, model=model, superseded_at__isnull=True
+    ).first()
+    key = pricing.pricing_key() if pricing else "0-0"
+
+    with transaction.atomic():
+        profile, _ = Profile.objects.select_for_update().get_or_create(user=user)
+        u = profile.usage or {}
+        u.setdefault(provider, {}).setdefault(model, {}).setdefault(
+            key, {"prompt_tokens": 0, "completion_tokens": 0}
+        )
+        u[provider][model][key]["prompt_tokens"]     += prompt_tokens
+        u[provider][model][key]["completion_tokens"] += completion_tokens
+        profile.usage = u
+        profile.save(update_fields=["usage"])
 
 
 # ------------------------------------------------------------------ #
@@ -241,7 +278,7 @@ def _do_score(user, job: Job, cv: CV, client, mode: str = "normal",
         seed=42,
         timeout=SCORE_TIMEOUT,
     )
-    return json.loads(response.choices[0].message.content)
+    return json.loads(response.choices[0].message.content), response.usage
 
 
 def _save_score(job: Job, cv: CV, mode: str, result: dict,
@@ -278,7 +315,7 @@ def _analyse_jd(text: str, client, url: str = "") -> dict:
         seed=42,
         timeout=SCORE_TIMEOUT,
     )
-    return json.loads(response.choices[0].message.content)
+    return json.loads(response.choices[0].message.content), response.usage
 
 
 def _url_to_pdf_and_text(url: str):
@@ -577,7 +614,8 @@ def add_job_url(request):
             messages.warning(request, "Could not load the URL. Try uploading a PDF or pasting the text instead.")
             return _modal_add_jobs_redirect(request)
 
-    job_data = _analyse_jd(jd_text, client, url=url)
+    job_data, llm_usage = _analyse_jd(jd_text, client, url=url)
+    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage)
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
         messages.warning(request, "The analysis returned no job content.")
         return _modal_add_jobs_redirect(request)
@@ -609,7 +647,8 @@ def add_job_text(request):
         messages.warning(request, "OPENAI_KEY is not configured.")
         return _modal_add_jobs_redirect(request)
 
-    job_data = _analyse_jd(text, client, url=url)
+    job_data, llm_usage = _analyse_jd(text, client, url=url)
+    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage)
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
         messages.warning(request, "The analysis returned no job content.")
         return _modal_add_jobs_redirect(request)
@@ -666,9 +705,12 @@ def scrape_categories(request):
         base_url = url or "unknown"
         multi_company = bool(data.get("multi_company", False))
         try:
-            jobs = GenericScraper().setup(Path(settings.DATA_DIR), client,
-                                          multi_company=multi_company).fetch_jobs(
-                base_url, html_src=html_src or None)
+            scraper = GenericScraper().setup(Path(settings.DATA_DIR), client,
+                                             multi_company=multi_company)
+            jobs = scraper.fetch_jobs(base_url, html_src=html_src or None)
+            fetch_usage = getattr(scraper, "_fetch_usage", None)
+            if fetch_usage:
+                _track_usage(request.user, "openai", "gpt-4o-mini", fetch_usage)
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
 
@@ -775,6 +817,9 @@ def scrape_stream(request):
 
             # Create Company + Job models from completed events
             if not event.get("starting") and not event.get("error"):
+                llm_usage = event.get("llm_usage")
+                if llm_usage:
+                    _track_usage(user, "openai", "gpt-4o-mini", llm_usage)
                 job_data  = event.get("job_data") or {}
                 job_uuid  = event.get("uuid")
                 if job_data and job_uuid:
@@ -845,7 +890,8 @@ def score_one(request, company_slug, job_id):
     mode           = _current_mode(request)
     with_notes_txt = _get_notes_text(request) if _use_notes(request) else ""
 
-    result = _do_score(request.user, job, selected_cv, client, mode, with_notes_txt)
+    result, llm_usage = _do_score(request.user, job, selected_cv, client, mode, with_notes_txt)
+    _track_usage(request.user, "openai", "gpt-4o", llm_usage)
     _save_score(job, selected_cv, mode, result, with_notes_txt)
 
     return HttpResponseRedirect(request.META.get(
@@ -882,7 +928,8 @@ def score_company_stream(request, company_slug):
             last_error = None
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
-                    result = _do_score(user, job, selected_cv, client, mode, with_notes_txt)
+                    result, llm_usage = _do_score(user, job, selected_cv, client, mode, with_notes_txt)
+                    _track_usage(user, "openai", "gpt-4o", llm_usage)
                     _save_score(job, selected_cv, mode, result, with_notes_txt)
                     last_error = None
                     break

@@ -10,7 +10,23 @@ from django.core.mail import send_mail
 from .decorators import public_view, private_view
 from .exceptions import ErrorMessage
 from .utils import booleanize, random_username
-from .models import User, LoginToken, Profile
+from .models import User, LoginToken, Profile, LLMPricing
+
+
+def _compute_usage_cost(usage: dict) -> float:
+    """Compute total cost in USD from a Profile.usage JSON dict."""
+    pricing_lookup = {
+        (p.provider, p.model, p.pricing_key()): p.price
+        for p in LLMPricing.objects.all()
+    }
+    total = 0.0
+    for provider, models in usage.items():
+        for model, keys in models.items():
+            for key, tokens in keys.items():
+                price = pricing_lookup.get((provider, model, key), {})
+                for token_type, count in tokens.items():
+                    total += count * price.get(token_type, 0) / 1_000_000
+    return total
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +288,8 @@ def account(request):
                 raise ErrorMessage('Account ID did not match.')
 
         data['edit'] = None
+
+    data['total_cost'] = _compute_usage_cost(profile.usage or {})
 
     return render(request, 'account.html', {'data': data})
 

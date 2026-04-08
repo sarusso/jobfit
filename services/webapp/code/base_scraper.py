@@ -168,7 +168,7 @@ class BaseScraper(ABC):
             seed=42,
             timeout=getattr(self, "_openai_timeout", 120),
         )
-        return json.loads(response.choices[0].message.content)
+        return json.loads(response.choices[0].message.content), response.usage
 
     def _save(self, url: str, pdf_src: Path, company: str, job: Optional[dict] = None, company_name: Optional[str] = None) -> Path:
         """Save PDF (always) and JSON (when job is provided) to data/<company>/<role_id>.*
@@ -249,8 +249,12 @@ class BaseScraper(ABC):
                         job = None
                         if self._openai_client:
                             try:
-                                job = self.analyse_job(page_text, url)
+                                job, llm_usage = self.analyse_job(page_text, url)
                                 event["title"] = job.get("title") or event["title"]
+                                event["llm_usage"] = {
+                                    "prompt_tokens":     llm_usage.prompt_tokens,
+                                    "completion_tokens": llm_usage.completion_tokens,
+                                }
                             except Exception as e:
                                 event["analyse_error"] = str(e)
                         if job:
@@ -275,7 +279,7 @@ class BaseScraper(ABC):
                         job = None
                         if self._openai_client:
                             try:
-                                job = self.analyse_job(page_text, url)
+                                job, _ = self.analyse_job(page_text, url)
                                 event["title"] = job.get("title") or event["title"]
                             except Exception as e:
                                 event["analyse_error"] = str(e)

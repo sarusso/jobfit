@@ -29,7 +29,7 @@ def _rendered_html(url: str, timeout_ms: int = 30_000) -> str:
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
-        page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+        page.goto(url, wait_until="load", timeout=timeout_ms)
         html = page.content()
         browser.close()
 
@@ -141,6 +141,8 @@ class GenericScraper(BaseScraper):
         current_url = base_url
         current_html = html_src  # pasted HTML only used for the first page
 
+        self._fetch_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+
         while current_url and current_url not in visited:
             visited.add(current_url)
             page_html = current_html if current_html else _rendered_html(current_url, timeout_ms=timeout_ms)
@@ -154,6 +156,8 @@ class GenericScraper(BaseScraper):
                 seed=42,
                 timeout=getattr(self, "_openai_timeout", 120),
             )
+            self._fetch_usage["prompt_tokens"]     += response.usage.prompt_tokens
+            self._fetch_usage["completion_tokens"] += response.usage.completion_tokens
             data = json.loads(response.choices[0].message.content)
             log.debug("fetch_jobs page=%s response:\n%s", current_url, json.dumps(data, indent=2, ensure_ascii=False))
 

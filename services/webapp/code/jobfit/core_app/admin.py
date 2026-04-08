@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 
-from .models import User, LoginToken, Profile, Company, Job, CV, Notes, Score
+from .models import User, LoginToken, Profile, Company, Job, CV, Notes, Score, LLMPricing
 
 # Remove Group (unused) and the default auth section clutter
 admin.site.unregister(Group)
@@ -57,3 +57,9 @@ class ScoreAdmin(admin.ModelAdmin):
     list_display  = ('job', 'cv', 'mode', 'score')
     list_filter   = ('mode',)
     raw_id_fields = ('job', 'cv')
+
+
+@admin.register(LLMPricing)
+class LLMPricingAdmin(admin.ModelAdmin):
+    list_display  = ('provider', 'model', 'pricing_key', 'superseded_at')
+    list_filter   = ('provider', 'model')
