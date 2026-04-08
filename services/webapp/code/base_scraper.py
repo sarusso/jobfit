@@ -122,7 +122,7 @@ class BaseScraper(ABC):
     def render_to_pdf(self, url: str, output_path: Path, page) -> str:
         """Navigate to url, save full page as PDF, return page plain text."""
         timeout_ms = getattr(self, "_timeout", 30) * 1000
-        page.goto(url, wait_until="networkidle", timeout=timeout_ms)
+        page.goto(url, wait_until="load", timeout=timeout_ms)
         page.pdf(path=str(output_path), format="A4", print_background=True)
         return page.inner_text("body")
 
@@ -146,6 +146,11 @@ class BaseScraper(ABC):
             "requirements": ["list of required qualifications / skills"],
             "nice_to_have": ["list of preferred but not required qualifications"],
             "salary": "salary info as a string, or null if not mentioned",
+            "other": (
+                "Any other relevant contextual information that does not fit in the fields above — "
+                "e.g. application process, interview format, visa sponsorship, relocation support, "
+                "team culture, perks, benefits, equity, work schedule. Leave empty string if nothing relevant."
+            ),
             "url": url,
         }
         prompt = (

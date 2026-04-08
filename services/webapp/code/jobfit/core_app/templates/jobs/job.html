@@ -121,6 +121,15 @@
     </div>
     {% endif %}
 
+    {% if job.other %}
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="section-title">Other</div>
+        <p class="mb-0 small">{{ job.other }}</p>
+      </div>
+    </div>
+    {% endif %}
+
   </div>
   <div class="col-lg-4">
 

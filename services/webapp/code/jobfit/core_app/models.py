@@ -64,6 +64,7 @@ class Job(models.Model):
     requirements     = JSONField(default=list, blank=True)
     nice_to_have     = JSONField(default=list, blank=True)
     salary           = models.CharField(max_length=255, blank=True)
+    other            = models.TextField(blank=True)
     # source: URL string if imported from URL, "file" or "text" otherwise
     source           = models.CharField(max_length=2048, blank=True)
     # source_file_path: relative to user data dir, e.g. "jobs/<uuid>.pdf"

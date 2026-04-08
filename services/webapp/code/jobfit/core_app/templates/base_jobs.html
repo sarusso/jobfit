@@ -19,6 +19,7 @@
     .job-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transition: box-shadow .15s ease; }
     .list-item { border-left: 3px solid #dee2e6; padding-left: .75rem; margin-bottom: .4rem; }
     pre { white-space: pre-wrap; word-break: break-word; }
+    .alert.py-2 .btn-close { top: 50%; transform: translateY(-50%); }
     #addJobsModal .tab-pane { padding: 1.5rem 0 0.5rem; }
     #cvModal .modal-content, #notesModal .modal-content, #addJobsModal .modal-content { min-height: 450px; }
     .breadcrumb-item a { color: #2679f3; text-decoration: none; }
@@ -126,7 +127,7 @@
 
   {# ── Messages ── #}
   {% if messages %}
-  <div class="container mb-0 pb-0">
+  <div id="flash-messages" class="container mb-0 pb-0">
     {% for message in messages %}
     <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show py-2 mb-2" role="alert">
       {{ message }}
@@ -141,7 +142,7 @@
   </div>
 
   <!-- CV modal -->
-  <div class="modal fade" id="cvModal" tabindex="-1" aria-labelledby="cvModalLabel" aria-hidden="true">
+  <div class="modal fade" id="cvModal" tabindex="-1" aria-labelledby="cvModalLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header" style="background:#f8f9fa;border-radius:.375rem .375rem 0 0">
@@ -214,7 +215,7 @@
   </div>
 
   <!-- Personal notes modal -->
-  <div class="modal fade" id="notesModal" tabindex="-1" aria-labelledby="notesModalLabel" aria-hidden="true">
+  <div class="modal fade" id="notesModal" tabindex="-1" aria-labelledby="notesModalLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-lg">
       <form action="{% url 'jobs_notes_save' %}" method="post">
         {% csrf_token %}
@@ -241,7 +242,7 @@
   </div>
 
   <!-- Add Jobs modal -->
-  <div class="modal fade" id="addJobsModal" tabindex="-1" aria-labelledby="addJobsModalLabel" aria-hidden="true">
+  <div class="modal fade" id="addJobsModal" tabindex="-1" aria-labelledby="addJobsModalLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header pb-0 border-0" style="background:#f8f9fa;border-radius:.375rem .375rem 0 0">
@@ -674,6 +675,18 @@
       ta.value = ta.defaultValue;
     });
 
+    ['addJobsModal', 'cvModal', 'notesModal'].forEach(id => {
+      document.getElementById(id).addEventListener('hidden.bs.modal', () => {
+        const msgs = document.getElementById('flash-messages');
+        if (msgs) msgs.remove();
+      });
+    });
+
+    document.getElementById('addJobsTabs').addEventListener('shown.bs.tab', () => {
+      const msgs = document.getElementById('flash-messages');
+      if (msgs) msgs.remove();
+    });
+
     const _modalParam = new URLSearchParams(location.search).get('modal');
     function _openModalInstant(el) {
       el.classList.remove('fade');
@@ -683,9 +696,23 @@
     if (_modalParam === 'add-jobs') {
       _openModalInstant(document.getElementById('addJobsModal'));
       history.replaceState(null, '', location.pathname);
+      const msgs = document.getElementById('flash-messages');
+      if (msgs) {
+        const modalBody = document.querySelector('#addJobsModal .modal-body');
+        msgs.classList.remove('container', 'mb-0', 'pb-0');
+        msgs.classList.add('mb-3');
+        modalBody.insertBefore(msgs, modalBody.firstChild);
+      }
     } else if (_modalParam === 'cv') {
       _openModalInstant(document.getElementById('cvModal'));
       history.replaceState(null, '', location.pathname);
+      const msgs = document.getElementById('flash-messages');
+      if (msgs) {
+        const modalBody = document.querySelector('#cvModal .modal-body');
+        msgs.classList.remove('container', 'mb-0', 'pb-0');
+        msgs.classList.add('mb-3');
+        modalBody.insertBefore(msgs, modalBody.firstChild);
+      }
     }
 
     document.querySelectorAll('form[action*="/score/"]').forEach(form => {

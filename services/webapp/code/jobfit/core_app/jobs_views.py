@@ -182,6 +182,11 @@ _JD_SCHEMA = {
     "requirements": ["list of required qualifications / skills"],
     "nice_to_have": ["list of preferred but not required qualifications"],
     "salary": "salary info as a string, or null if not mentioned",
+    "other": (
+        "Any other relevant contextual information that does not fit in the fields above — "
+        "e.g. application process, interview format, visa sponsorship, relocation support, "
+        "team culture, perks, benefits, equity, work schedule. Leave empty string if nothing relevant."
+    ),
 }
 
 
@@ -281,7 +286,7 @@ def _url_to_pdf_and_text(url: str):
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
-        page.goto(url, wait_until="networkidle", timeout=30_000)
+        page.goto(url, wait_until="load", timeout=30_000)
         pdf_bytes = page.pdf(format="A4")
         page_text = page.inner_text("body")
         browser.close()
@@ -314,6 +319,7 @@ def _create_job(user, job_data: dict, pdf_bytes: bytes | None = None,
         requirements     = job_data.get("requirements") or [],
         nice_to_have     = job_data.get("nice_to_have") or [],
         salary           = str(job_data.get("salary") or ""),
+        other            = job_data.get("other", "") or "",
         source           = source,
     )
 
@@ -798,6 +804,7 @@ def scrape_stream(request):
                                 "requirements":     job_data.get("requirements") or [],
                                 "nice_to_have":     job_data.get("nice_to_have") or [],
                                 "salary":           str(job_data.get("salary") or ""),
+                                "other":            job_data.get("other", "") or "",
                                 "source":           event.get("url", ""),
                                 "source_file_path": f"jobs/{job_uuid}.pdf" if pdf_path.exists() else "",
                             },
