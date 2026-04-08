@@ -148,53 +148,80 @@
           </div>
 
           <div class="account-row">
-            <div class="account-label">Total spending</div>
-            <div class="account-value">${{ data.total_cost|floatformat:4 }}</div>
+            <div class="account-label">Current balance</div>
+            <div class="account-value fw-semibold">${{ data.balance|floatformat:2 }}</div>
           </div>
 
+
         </form>
+
+        <form action="/account/redeem/" method="post">
+          {% csrf_token %}
+          <div class="account-row">
+            <div class="account-label">Redeem gift code</div>
+            <div class="account-value">
+              <div class="input-group input-group-sm" style="width:16rem">
+                <input type="text" name="code" class="form-control"
+                       placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+                <button class="btn btn-outline-primary ms-2" type="submit">Redeem</button>
+              </div>
+            </div>
+          </div>
+        </form>
+
       </div>
     </div>
   </div>
 
-  <!-- Balance & credits -->
+  <!-- Top-ups -->
+  {% if data.all_topups %}
   <div class="col-12">
     <div class="card shadow-sm">
-      <div class="card-header fw-bold">Balance</div>
+      <div class="card-header fw-bold">Top-ups</div>
+      <div class="card-body px-3 py-2">
+        <table class="table table-sm table-borderless mb-0 small">
+          <tbody>
+            {% for t in data.all_topups %}
+            <tr class="{% if t.is_expired %}text-muted{% endif %}">
+              <td class="ps-0" style="width:9rem;white-space:nowrap">{{ t.created_at|date:"Y-m-d H:i" }}</td>
+              <td class="{% if not t.is_expired %}text-success fw-semibold{% endif %}" style="white-space:nowrap">${{ t.amount|floatformat:2 }}</td>
+              <td class="text-muted">(residual: ${{ t.residual|floatformat:2 }})</td>
+              <td class="text-muted">
+                {% if t.is_expired %}expired on {{ t.expires_at|date:"Y-m-d H:i" }}
+                {% elif t.expires_at %}expires {{ t.expires_at|date:"Y-m-d H:i" }}
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Usage -->
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold">Usage</div>
       <div class="card-body px-3 py-2">
 
         <div class="account-row">
-          <div class="account-label">Current balance</div>
-          <div class="account-value fw-semibold {% if data.balance < 0 %}text-danger{% endif %}">
-            ${{ data.balance|floatformat:2 }}
-          </div>
+          <div class="account-label">Total</div>
+          <div class="account-value">${{ data.total_cost|floatformat:4 }}</div>
         </div>
 
-        <div class="account-row">
-          <div class="account-label">Redeem code</div>
-          <div class="account-value">
-            <form action="/account/redeem/" method="post" class="d-flex gap-2">
-              {% csrf_token %}
-              <input type="text" name="code" class="form-control form-control-sm" style="max-width:16rem"
-                     placeholder="XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
-              <button class="btn btn-sm btn-outline-primary" type="submit">Redeem</button>
-            </form>
-          </div>
-        </div>
-
-        {% if data.ledger %}
+        {% if data.usage_log %}
         <div class="account-row" style="align-items:flex-start">
-          <div class="account-label" style="padding-top:.5rem">Transactions</div>
+          <div class="account-label" style="padding-top:.5rem">Breakdown</div>
           <div class="account-value">
             <table class="table table-sm table-borderless mb-0 small">
               <tbody>
-                {% for entry in data.ledger %}
+                {% for entry in data.usage_log %}
                 <tr>
                   <td class="text-muted ps-0" style="width:9rem">{{ entry.created_at|date:"Y-m-d H:i" }}</td>
                   <td>{{ entry.description }}</td>
-                  <td class="text-end pe-0 {% if entry.amount >= 0 %}text-success{% else %}text-danger{% endif %}" style="white-space:nowrap">
-                    {% if entry.amount >= 0 %}+{% endif %}${{ entry.amount|floatformat:4 }}
-                  </td>
+                  <td class="text-end pe-0 text-danger" style="white-space:nowrap">-${{ entry.amount|floatformat:4 }}</td>
                 </tr>
                 {% endfor %}
               </tbody>

@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group
 
-from .models import User, LoginToken, Profile, Company, Job, CV, Notes, Score, LLMPricing, GiftCode, CreditLedger
+from .models import User, LoginToken, Profile, Company, Job, CV, Notes, Score, LLMPricing, GiftCode, TopUp, UsageLog
 
 # Remove Group (unused) and the default auth section clutter
 admin.site.unregister(Group)
@@ -67,14 +67,22 @@ class LLMPricingAdmin(admin.ModelAdmin):
 
 @admin.register(GiftCode)
 class GiftCodeAdmin(admin.ModelAdmin):
-    list_display  = ('code', 'amount', 'expires_at', 'redeemed_by', 'redeemed_at')
+    list_display  = ('code', 'amount', 'validity_days', 'expires_at', 'redeemed_by', 'redeemed_at')
     list_filter   = ('expires_at',)
     search_fields = ('code', 'redeemed_by__email')
     readonly_fields = ('redeemed_by', 'redeemed_at')
 
 
-@admin.register(CreditLedger)
-class CreditLedgerAdmin(admin.ModelAdmin):
+@admin.register(TopUp)
+class TopUpAdmin(admin.ModelAdmin):
+    list_display  = ('user', 'amount', 'residual', 'created_at', 'expires_at')
+    list_filter   = ('expires_at',)
+    search_fields = ('user__email',)
+    readonly_fields = ('created_at',)
+
+
+@admin.register(UsageLog)
+class UsageLogAdmin(admin.ModelAdmin):
     list_display  = ('user', 'amount', 'description', 'created_at')
     list_filter   = ('created_at',)
     search_fields = ('user__email', 'description')

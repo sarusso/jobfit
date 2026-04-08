@@ -1,5 +1,6 @@
 import uuid
 import logging
+from datetime import timedelta
 from decimal import Decimal
 
 from django.shortcuts import render
@@ -8,13 +9,13 @@ from django.contrib.auth import authenticate, login, logout
 from django.conf import settings
 from django.contrib import messages
 from django.core.mail import send_mail
-from django.db.models import Sum
+from django.db.models import F, Q, Sum
 from django.utils import timezone
 
 from .decorators import public_view, private_view
 from .exceptions import ErrorMessage
 from .utils import booleanize, random_username
-from .models import User, LoginToken, Profile, LLMPricing, GiftCode, CreditLedger
+from .models import User, LoginToken, Profile, LLMPricing, GiftCode, TopUp, UsageLog
 
 
 def _compute_usage_cost(usage: dict) -> float:
@@ -294,10 +295,16 @@ def account(request):
         data['edit'] = None
 
     data['total_cost'] = _compute_usage_cost(profile.usage or {})
-
-    balance_result = CreditLedger.objects.filter(user=request.user).aggregate(b=Sum('amount'))['b']
-    data['balance'] = balance_result if balance_result is not None else Decimal('0')
-    data['ledger']  = CreditLedger.objects.filter(user=request.user)[:20]
+    data['balance']    = profile.get_balance()
+    data['topups']     = TopUp.objects.filter(user=request.user).filter(
+        Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+    ).order_by(F('expires_at').asc(nulls_last=True))
+    _now = timezone.now()
+    all_topups = TopUp.objects.filter(user=request.user).order_by('-created_at')
+    for t in all_topups:
+        t.is_expired = t.expires_at is not None and t.expires_at < _now
+    data['all_topups'] = all_topups
+    data['usage_log']  = UsageLog.objects.filter(user=request.user)[:20]
 
     return render(request, 'account.html', {'data': data})
 
@@ -333,14 +340,20 @@ def redeem_gift_code(request):
                 messages.warning(request, 'This gift code has expired.')
                 return HttpResponseRedirect('/account/')
 
+            now = timezone.now()
             gift.redeemed_by = request.user
-            gift.redeemed_at = timezone.now()
+            gift.redeemed_at = now
             gift.save(update_fields=['redeemed_by', 'redeemed_at'])
 
-            CreditLedger.objects.create(
+            expires_at = (
+                now + timedelta(days=gift.validity_days)
+                if gift.validity_days else None
+            )
+            TopUp.objects.create(
                 user=request.user,
                 amount=gift.amount,
-                description=f'Gift code {code_str}',
+                residual=gift.amount,
+                expires_at=expires_at,
             )
     except Exception as e:
         logger.error('Gift code redemption error: %s', e)

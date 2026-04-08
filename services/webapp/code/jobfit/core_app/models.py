@@ -1,9 +1,12 @@
 import uuid
 import logging
+from decimal import Decimal
 
 from django.contrib.auth.models import AbstractUser
 from django.contrib.postgres.fields import JSONField
 from django.db import models
+from django.db.models import Q, Sum
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,15 @@ class Profile(models.Model):
     last_accepted_terms   = models.FloatField('Last accepted TOS', default=0)
     last_accepted_privacy = models.FloatField('Last accepted Privacy Policy', default=0)
     usage                 = JSONField(default=dict, blank=True)
+
+    def get_balance(self) -> Decimal:
+        result = TopUp.objects.filter(
+            user=self.user,
+            residual__gt=0,
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        ).aggregate(b=Sum('residual'))['b']
+        return result if result is not None else Decimal('0')
 
     def __str__(self):
         return f'Profile of user "{self.user.email}"'
@@ -122,21 +134,37 @@ class Notes(models.Model):
 
 
 class GiftCode(models.Model):
-    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    code        = models.CharField(max_length=64, unique=True)
-    amount      = models.DecimalField(max_digits=10, decimal_places=4)  # USD
-    expires_at  = models.DateTimeField()
-    redeemed_by = models.ForeignKey('User', null=True, blank=True, on_delete=models.SET_NULL, related_name='redeemed_codes')
-    redeemed_at = models.DateTimeField(null=True, blank=True)
+    id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code          = models.CharField(max_length=64, unique=True)
+    amount        = models.DecimalField(max_digits=10, decimal_places=4)  # USD
+    expires_at    = models.DateTimeField()                                 # deadline to redeem
+    validity_days = models.PositiveIntegerField(null=True, blank=True)    # days top-up is valid after redemption; null = no expiry
+    redeemed_by   = models.ForeignKey('User', null=True, blank=True, on_delete=models.SET_NULL, related_name='redeemed_codes')
+    redeemed_at   = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f'{self.code} (${self.amount})'
 
 
-class CreditLedger(models.Model):
+class TopUp(models.Model):
+    id         = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user       = models.ForeignKey('User', on_delete=models.CASCADE, related_name='topups')
+    amount     = models.DecimalField(max_digits=10, decimal_places=4)   # original amount, never changes
+    residual   = models.DecimalField(max_digits=10, decimal_places=4)   # remaining balance, decremented on usage
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)            # null = never expires
+
+    class Meta:
+        ordering = ['expires_at', 'created_at']
+
+    def __str__(self):
+        return f'TopUp ${self.amount} (residual ${self.residual}) for {self.user.email}'
+
+
+class UsageLog(models.Model):
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user        = models.ForeignKey('User', on_delete=models.CASCADE, related_name='ledger_entries')
-    amount      = models.DecimalField(max_digits=10, decimal_places=4)  # + credit, - debit
+    user        = models.ForeignKey('User', on_delete=models.CASCADE, related_name='usage_logs')
+    amount      = models.DecimalField(max_digits=10, decimal_places=4)  # positive cost in USD
     description = models.CharField(max_length=255)
     created_at  = models.DateTimeField(auto_now_add=True)
 
@@ -144,8 +172,7 @@ class CreditLedger(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        sign = '+' if self.amount >= 0 else ''
-        return f'{sign}${self.amount} — {self.description} ({self.user.email})'
+        return f'-${self.amount} — {self.description} ({self.user.email})'
 
 
 class Score(models.Model):
