@@ -5,7 +5,8 @@ set -e
 chown jobfit:jobfit /var/log/webapp
 
 # Create and set proper permissions to the data/resources and shared dir
-mkdir -p /data/resources 
+mkdir -p /data/resources
+chown jobfit:jobfit /data
 chown jobfit:jobfit /data/resources
 chown jobfit:jobfit /shared
 
