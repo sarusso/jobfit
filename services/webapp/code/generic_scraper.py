@@ -154,7 +154,7 @@ class GenericScraper(BaseScraper):
                 messages=[{"role": "user", "content": _make_prompt(current_url, page_html)}],
                 temperature=0,
                 seed=42,
-                timeout=getattr(self, "_openai_timeout", 120),
+                timeout=getattr(self, "_openai_timeout", 300),
             )
             self._fetch_usage["prompt_tokens"]     += response.usage.prompt_tokens
             self._fetch_usage["completion_tokens"] += response.usage.completion_tokens

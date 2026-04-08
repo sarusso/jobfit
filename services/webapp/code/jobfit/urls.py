@@ -43,6 +43,7 @@ urlpatterns = [
     path('jobs/add-jobs/scrape/categories/',     jobs_views.scrape_categories, name='jobs_scrape_categories'),
     path('jobs/add-jobs/scrape/confirm/',        jobs_views.scrape_confirm,    name='jobs_scrape_confirm'),
     path('jobs/add-jobs/scrape/stream/',         jobs_views.scrape_stream,     name='jobs_scrape_stream'),
+    path('jobs/add-jobs/scrape/pdf-extract/',    jobs_views.extract_pdf_jobs,  name='jobs_scrape_pdf_extract'),
 
     # Jobs app — scoring (before generic company routes)
     path('jobs/score/<slug:company_slug>/stream/', jobs_views.score_company_stream, name='jobs_score_stream'),

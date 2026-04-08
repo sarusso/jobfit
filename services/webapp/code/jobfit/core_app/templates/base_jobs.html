@@ -336,6 +336,7 @@
                     <select id="scrapeBoard" class="form-select" onchange="updateBoardFields()">
                       <option value="generic" selected>Generic</option>
                       <option value="lever">Lever</option>
+                      <option value="pdf">PDF</option>
                     </select>
                   </div>
                   <div class="col-sm-9 d-none" id="fieldLeverSlug">
@@ -354,6 +355,10 @@
                       </div>
                     </div>
                   </div>
+                  <div class="col-sm-9 d-none" id="fieldPdf">
+                    <label class="form-label fw-semibold">PDF file</label>
+                    <input type="file" id="scrapePdfFile" class="form-control" accept=".pdf">
+                  </div>
                 </div>
                 <details class="mb-3" id="advancedDetails">
                   <summary class="text-muted small" style="cursor:pointer">Advanced</summary>
@@ -363,13 +368,13 @@
                         <label class="form-label fw-semibold small">Limit</label>
                         <input type="number" id="scrapeLimit" class="form-control form-control-sm" placeholder="all" min="1">
                       </div>
-                      <div style="max-width:8rem">
+                      <div style="max-width:8rem" id="fieldPageTimeout">
                         <label class="form-label fw-semibold small">Page timeout (s)</label>
                         <input type="number" id="scrapeTimeout" class="form-control form-control-sm" placeholder="30" min="5" value="30">
                       </div>
                       <div style="max-width:8rem">
                         <label class="form-label fw-semibold small">OpenAI timeout (s)</label>
-                        <input type="number" id="scrapeOpenaiTimeout" class="form-control form-control-sm" placeholder="120" min="10" value="120">
+                        <input type="number" id="scrapeOpenaiTimeout" class="form-control form-control-sm" placeholder="300" min="10" value="300">
                       </div>
                     </div>
                     <div id="fieldMultiCompany">
@@ -468,8 +473,11 @@
       const board = document.getElementById('scrapeBoard').value;
       document.getElementById('fieldLeverSlug').classList.toggle('d-none', board !== 'lever');
       document.getElementById('fieldGeneric').classList.toggle('d-none', board !== 'generic');
+      document.getElementById('fieldPdf').classList.toggle('d-none', board !== 'pdf');
       document.getElementById('fieldHtmlSource').classList.toggle('d-none', board !== 'generic');
       document.getElementById('fieldMultiCompany').classList.toggle('d-none', board !== 'generic');
+      document.getElementById('fieldPageTimeout').classList.toggle('d-none', board === 'pdf');
+      document.getElementById('fetchBtnLabel').textContent = board === 'pdf' ? 'Extract Jobs' : 'Fetch Jobs';
     }
 
     async function fetchCategories() {
@@ -477,41 +485,60 @@
       const spinner = document.getElementById('fetchSpinner');
       const errEl   = document.getElementById('fetchError');
       errEl.classList.add('d-none');
-      let payload = {board};
-      if (board === 'lever') {
-        const company = document.getElementById('scrapeCompany').value.trim();
-        if (!company) { errEl.textContent = 'Enter a company slug.'; errEl.classList.remove('d-none'); return; }
-        payload.company = company;
+
+      let fetchPromise;
+      if (board === 'pdf') {
+        const pdfInput = document.getElementById('scrapePdfFile');
+        if (!pdfInput.files.length) { errEl.textContent = 'Select a PDF file.'; errEl.classList.remove('d-none'); return; }
+        const formData = new FormData();
+        formData.append('pdf', pdfInput.files[0]);
+        formData.append('openai_timeout', parseInt(document.getElementById('scrapeOpenaiTimeout').value) || 300);
+        formData.append('csrfmiddlewaretoken', getCsrfToken());
+        fetchPromise = fetch(JOBS_BASE + 'add-jobs/scrape/pdf-extract/', {
+          method: 'POST',
+          headers: {'X-CSRFToken': getCsrfToken()},
+          body: formData,
+        });
       } else {
-        const url     = document.getElementById('scrapeUrl').value.trim();
-        const company = document.getElementById('scrapeCompanyName').value.trim();
-        const htmlSrc = document.getElementById('scrapeHtml')?.value.trim() || '';
-        if (!url && !htmlSrc) { errEl.textContent = 'Enter the careers page URL or paste HTML source.'; errEl.classList.remove('d-none'); return; }
-        payload.url = url; payload.company = company; payload.html_src = htmlSrc;
-        payload.multi_company = document.getElementById('scrapeMultiCompany').checked;
-      }
-      document.getElementById('scrapeStep2').classList.add('d-none');
-      document.getElementById('jobList').innerHTML = '';
-      const btn = document.getElementById('fetchBtn');
-      btn.disabled = true;
-      document.getElementById('fetchBtnLabel').textContent = 'Fetching…';
-      spinner.classList.remove('d-none');
-      try {
-        const resp = await fetch(JOBS_BASE + 'add-jobs/scrape/categories/', {
+        let payload = {board};
+        if (board === 'lever') {
+          const company = document.getElementById('scrapeCompany').value.trim();
+          if (!company) { errEl.textContent = 'Enter a company slug.'; errEl.classList.remove('d-none'); return; }
+          payload.company = company;
+        } else {
+          const url     = document.getElementById('scrapeUrl').value.trim();
+          const company = document.getElementById('scrapeCompanyName').value.trim();
+          const htmlSrc = document.getElementById('scrapeHtml')?.value.trim() || '';
+          if (!url && !htmlSrc) { errEl.textContent = 'Enter the careers page URL or paste HTML source.'; errEl.classList.remove('d-none'); return; }
+          payload.url = url; payload.company = company; payload.html_src = htmlSrc;
+          payload.multi_company = document.getElementById('scrapeMultiCompany').checked;
+        }
+        fetchPromise = fetch(JOBS_BASE + 'add-jobs/scrape/categories/', {
           method: 'POST',
           headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
           body: JSON.stringify(payload),
         });
+      }
+
+      document.getElementById('scrapeStep2').classList.add('d-none');
+      document.getElementById('jobList').innerHTML = '';
+      const btn = document.getElementById('fetchBtn');
+      btn.disabled = true;
+      const origLabel = board === 'pdf' ? 'Extract Jobs' : 'Fetch Jobs';
+      document.getElementById('fetchBtnLabel').textContent = board === 'pdf' ? 'Extracting…' : 'Fetching…';
+      spinner.classList.remove('d-none');
+      try {
+        const resp = await fetchPromise;
         const data = await resp.json();
         spinner.classList.add('d-none'); btn.disabled = false;
-        document.getElementById('fetchBtnLabel').textContent = 'Fetch Jobs';
+        document.getElementById('fetchBtnLabel').textContent = origLabel;
         if (data.error) { errEl.textContent = data.error; errEl.classList.remove('d-none'); return; }
         _baseUrl = data.base_url; _allJobs = data.jobs || [];
         renderJobs(_allJobs);
         document.getElementById('scrapeStep2').classList.remove('d-none');
       } catch (e) {
         spinner.classList.add('d-none'); btn.disabled = false;
-        document.getElementById('fetchBtnLabel').textContent = 'Fetch Jobs';
+        document.getElementById('fetchBtnLabel').textContent = origLabel;
         errEl.textContent = 'Request failed: ' + e.message; errEl.classList.remove('d-none');
       }
     }
@@ -539,12 +566,13 @@
         const rows = groups[key].map((job, ji) => {
           const jobId = `job-${ci}-${ji}`;
           const safeTitle = job.title.replace(/"/g, '&quot;');
-          const safeUrl   = job.url.replace(/"/g, '&quot;');
+          const safeUrl   = (job.url || '').replace(/"/g, '&quot;');
           const safeCompany = (job.company || '').replace(/"/g, '&quot;');
           const alreadyIn = !!job.exists;
+          const jobDataAttr = job.job_data ? ` data-job-data='${JSON.stringify(job.job_data).replace(/'/g, '&#39;')}'` : '';
           return `<div class="d-flex align-items-center ps-4 py-1 border-bottom border-light${alreadyIn ? ' bg-light' : ''}">
             <input class="form-check-input job-check flex-shrink-0 me-2" type="checkbox"
-                   data-cat="${ci}" value="${safeUrl}" data-title="${safeTitle}" data-company="${safeCompany}"
+                   data-cat="${ci}" value="${safeUrl}" data-title="${safeTitle}" data-company="${safeCompany}"${jobDataAttr}
                    id="${jobId}" ${alreadyIn ? '' : 'checked'} onchange="updateCatToggle(${ci})">
             <label class="form-check-label small text-truncate${alreadyIn ? ' text-muted' : ''}" for="${jobId}" style="max-width:100%"
                    title="${safeTitle}">${job.title}${alreadyIn ? ' <span class="badge bg-secondary ms-1" style="font-size:.65em">already imported</span>' : ''}</label>
@@ -586,14 +614,17 @@
       const board   = document.getElementById('scrapeBoard').value;
       const company = board === 'lever'
         ? document.getElementById('scrapeCompany').value.trim()
+        : board === 'pdf' ? ''
         : document.getElementById('scrapeCompanyName').value.trim();
-      const limit          = parseInt(document.getElementById('scrapeLimit').value) || null;
-      const timeout        = parseInt(document.getElementById('scrapeTimeout').value) || 30;
-      const openai_timeout = parseInt(document.getElementById('scrapeOpenaiTimeout').value) || 120;
-      const multi_company  = document.getElementById('scrapeMultiCompany').checked;
-      const jobs = [...document.querySelectorAll('.job-check:checked')].map(cb => ({
-        url: cb.value, title: cb.dataset.title, company: cb.dataset.company || '',
-      }));
+      const limit          = parseInt(document.getElementById('scrapeLimit')?.value) || null;
+      const timeout        = parseInt(document.getElementById('scrapeTimeout')?.value) || 30;
+      const openai_timeout = parseInt(document.getElementById('scrapeOpenaiTimeout')?.value) || 300;
+      const multi_company  = document.getElementById('scrapeMultiCompany')?.checked || false;
+      const jobs = [...document.querySelectorAll('.job-check:checked')].map(cb => {
+        const j = {url: cb.value, title: cb.dataset.title, company: cb.dataset.company || ''};
+        if (cb.dataset.jobData) j.job_data = JSON.parse(cb.dataset.jobData);
+        return j;
+      });
       await fetch(JOBS_BASE + 'add-jobs/scrape/confirm/', {
         method: 'POST',
         headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
@@ -602,7 +633,7 @@
       document.getElementById('scrapeStep2').classList.add('d-none');
       document.getElementById('scrapeStep3').classList.remove('d-none');
       document.getElementById('scrapeBar').style.width = '0%';
-      document.getElementById('scrapeProgressLabel').textContent = 'Scraping…';
+      document.getElementById('scrapeProgressLabel').textContent = board === 'pdf' ? 'Importing…' : 'Scraping…';
       document.getElementById('scrapeCounts').textContent = '';
       document.getElementById('scrapeCurrentTitle').textContent = '';
       document.getElementById('scrapeViewCompany').classList.add('d-none');

@@ -31,7 +31,7 @@ from .models import CV, Company, Job, Notes, Score, LLMPricing, Profile
 
 log = logging.getLogger(__name__)
 
-SCORE_TIMEOUT = 60
+SCORE_TIMEOUT = 300
 MAX_RETRIES   = 3
 
 
@@ -294,6 +294,31 @@ def _save_score(job: Job, cv: CV, mode: str, result: dict,
         },
     )
     return score
+
+
+def _extract_jobs_from_pdf_text(text: str, client, timeout: int = SCORE_TIMEOUT):
+    """Call LLM to extract all job postings from PDF text. Returns (jobs_list, usage)."""
+    schema_item = dict(_JD_SCHEMA)
+    prompt = (
+        "The following text may contain one or more job postings extracted from a PDF. "
+        "Extract ALL job postings and return ONLY valid JSON matching this schema:\n\n"
+        '{"jobs": [<item>, ...]}\n\n'
+        f"Where each item follows this schema:\n{json.dumps(schema_item, indent=2)}\n\n"
+        "If only one job is present, return a list with one item. "
+        "Do NOT summarise or truncate the description field — copy it verbatim.\n\n"
+        f"Text:\n\n{text[:80000]}"
+    )
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        response_format={"type": "json_object"},
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+        seed=42,
+        timeout=timeout,
+    )
+    result = json.loads(response.choices[0].message.content)
+    jobs = result if isinstance(result, list) else result.get("jobs", [])
+    return jobs, response.usage
 
 
 def _analyse_jd(text: str, client, url: str = "") -> dict:
@@ -669,6 +694,52 @@ def add_job_text(request):
 # ------------------------------------------------------------------ #
 
 @private_view
+def extract_pdf_jobs(request):
+    """Upload a PDF containing one or more job postings; returns extracted job stubs."""
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    pdf_file = request.FILES.get("pdf")
+    if not pdf_file or not pdf_file.name.lower().endswith(".pdf"):
+        return JsonResponse({"error": "Please upload a PDF file."}, status=400)
+
+    client = _openai_client()
+    if not client:
+        return JsonResponse({"error": "OPENAI_KEY is not configured."}, status=400)
+
+    try:
+        from pypdf import PdfReader
+        pdf_bytes = pdf_file.read()
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        text = "\n".join(p.extract_text() or "" for p in reader.pages).strip()
+    except Exception as e:
+        return JsonResponse({"error": f"Could not read PDF: {e}"}, status=400)
+
+    if not text:
+        return JsonResponse({"error": "Could not extract any text from the PDF."}, status=400)
+
+    openai_timeout = int(request.POST.get("openai_timeout", 120) or 300)
+    try:
+        jobs, llm_usage = _extract_jobs_from_pdf_text(text, client, timeout=openai_timeout)
+    except Exception as e:
+        log.error("PDF extraction failed: %s", e)
+        return JsonResponse({"error": str(e)}, status=500)
+
+    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage)
+
+    stubs = [
+        {
+            "title":    jd.get("title", f"Job {i + 1}"),
+            "company":  jd.get("company", ""),
+            "url":      f"pdf:{i}",
+            "category": "From PDF",
+            "job_data": jd,
+        }
+        for i, jd in enumerate(jobs)
+    ]
+    return JsonResponse({"jobs": stubs, "base_url": ""})
+
+@private_view
 def scrape_categories(request):
     try:
         data = json.loads(request.body)
@@ -739,7 +810,7 @@ def scrape_confirm(request):
         "company":        data.get("company", ""),
         "jobs":           jobs,
         "timeout":        int(data.get("timeout") or 30),
-        "openai_timeout": int(data.get("openai_timeout") or 120),
+        "openai_timeout": int(data.get("openai_timeout") or 300),
         "multi_company":  bool(data.get("multi_company", False)),
     }
     request.session.modified = True
@@ -777,6 +848,43 @@ def scrape_stream(request):
         total = len(jobs)
         if not total:
             yield f"data: {json.dumps({'done': True, 'total': 0})}\n\n"
+            return
+
+        if board == "pdf":
+            last_company_slug = None
+            for i, j in enumerate(jobs, 1):
+                job_data = dict(j.get("job_data") or {})
+                title = j.get("title") or job_data.get("title", f"Job {i}")
+                yield f"data: {json.dumps({'starting': True, 'current': i, 'total': total, 'title': title})}\n\n"
+                try:
+                    company_name_raw = (job_data.get("company") or "").strip() or "Unknown"
+                    description      = job_data.pop("company_description", "") or ""
+                    company_obj      = _get_or_create_company(user, company_name_raw, description)
+                    last_company_slug = company_obj.slug
+                    Job.objects.create(
+                        company          = company_obj,
+                        title            = job_data.get("title", ""),
+                        location         = job_data.get("location", "") or "",
+                        employment_type  = job_data.get("employment_type", "") or "",
+                        experience_level = job_data.get("experience_level", "") or "",
+                        summary          = job_data.get("summary", "") or "",
+                        description      = job_data.get("description", "") or "",
+                        responsibilities = job_data.get("responsibilities") or [],
+                        requirements     = job_data.get("requirements") or [],
+                        nice_to_have     = job_data.get("nice_to_have") or [],
+                        salary           = str(job_data.get("salary") or ""),
+                        other            = job_data.get("other", "") or "",
+                        source           = "file",
+                    )
+                    event = {"current": i, "total": total, "title": title, "company": company_obj.slug}
+                except Exception as e:
+                    log.error("Failed to create PDF job %s: %s", title, e)
+                    event = {"current": i, "total": total, "title": title, "error": str(e)}
+                yield f"data: {json.dumps(event)}\n\n"
+            done_payload: dict = {"done": True, "total": total}
+            if last_company_slug:
+                done_payload["company"] = last_company_slug
+            yield f"data: {json.dumps(done_payload)}\n\n"
             return
 
         if board == "lever":

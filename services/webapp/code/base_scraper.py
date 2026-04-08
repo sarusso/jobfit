@@ -166,7 +166,7 @@ class BaseScraper(ABC):
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             seed=42,
-            timeout=getattr(self, "_openai_timeout", 120),
+            timeout=getattr(self, "_openai_timeout", 300),
         )
         return json.loads(response.choices[0].message.content), response.usage
 
@@ -198,7 +198,7 @@ class BaseScraper(ABC):
     # Web / programmatic interface                                         #
     # ------------------------------------------------------------------ #
 
-    def setup(self, data_dir: Path, openai_client=None, timeout: int = 30, openai_timeout: int = 120, multi_company: bool = False) -> "BaseScraper":
+    def setup(self, data_dir: Path, openai_client=None, timeout: int = 30, openai_timeout: int = 300, multi_company: bool = False) -> "BaseScraper":
         """Configure the scraper for use as a module (instead of via CLI)."""
         self._data_dir = data_dir
         self._openai_client = openai_client
