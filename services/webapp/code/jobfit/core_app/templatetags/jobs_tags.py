@@ -24,6 +24,14 @@ def score_badge(score_obj, size=""):
 
 
 @register.filter
+def pretty_field(value):
+    """Replace underscores with spaces and title-case."""
+    if not value:
+        return value
+    return str(value).replace('_', ' ').title()
+
+
+@register.filter
 def datefmt(value):
     """Format a datetime object or ISO string to '1 Jan 2025'."""
     if not value:
