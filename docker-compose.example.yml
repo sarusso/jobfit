@@ -28,13 +28,14 @@ services:
       - DJANGO_DEBUG=True
       - DJANGO_LOG_LEVEL=CRITICAL
       - JOBFIT_LOG_LEVEL=DEBUG
+      - MAIN_DOMAIN_NAME=https://jobfit.fyi
+      - OPENAI_KEY=your_openai_key_here
+      #- DJANGO_SECRET_KEY=your_secret_key_here
       #- DJANGO_EMAIL_HOST=
       #- DJANGO_EMAIL_HOST_USER=
       #- DJANGO_EMAIL_HOST_PASSWORD=
-      #- DJANGO_EMAIL_FROM="JobFit <notifications@jobfit.app>"
-      #- DJANGO_SECRET_KEY=your_secret_key_here
-      - JOBFIT_HOST=localhost
-      - OPENAI_KEY=
+      #- DJANGO_EMAIL_FROM="JobFit <notifications@jobfit.fyi>"
+      #- INVITATION_CODE=
     ports:
       - "8080:8080"
       - "7000-7020:7000-7020"
