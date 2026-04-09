@@ -136,6 +136,7 @@ class Notes(models.Model):
 class GiftCode(models.Model):
     id            = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code          = models.CharField(max_length=64, unique=True)
+    description   = models.CharField(max_length=255, blank=True)          # internal label, e.g. "julia", "second for matt"
     amount        = models.DecimalField(max_digits=10, decimal_places=4)  # USD
     expires_at    = models.DateTimeField()                                 # deadline to redeem
     validity_days = models.PositiveIntegerField(null=True, blank=True)    # days top-up is valid after redemption; null = no expiry

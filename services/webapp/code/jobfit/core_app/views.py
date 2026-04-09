@@ -306,6 +306,12 @@ def account(request):
     data['all_topups'] = all_topups
     data['usage_log']  = UsageLog.objects.filter(user=request.user)[:20]
 
+    if request.user.is_staff:
+        all_codes = GiftCode.objects.all().order_by('-id')
+        for c in all_codes:
+            c.is_expired = c.expires_at < _now and c.redeemed_by_id is None
+        data['all_gift_codes'] = all_codes
+
     return render(request, 'account.html', {'data': data})
 
 
@@ -362,6 +368,77 @@ def redeem_gift_code(request):
 
     messages.success(request, f'${gift.amount:.2f} added to your account.')
     return HttpResponseRedirect('/account/')
+
+
+#=========================
+#  Admin — gift code creation
+#=========================
+
+@private_view
+def create_gift_code(request):
+    if not request.user.is_staff:
+        return HttpResponseRedirect('/account/')
+    if request.method != 'POST':
+        return HttpResponseRedirect('/account/')
+
+    import random, string
+    code        = request.POST.get('code', '').strip().upper()
+    description = request.POST.get('description', '').strip()
+    amount      = request.POST.get('amount', '').strip()
+    expires_at  = request.POST.get('expires_at', '').strip()
+    validity_days = request.POST.get('validity_days', '').strip()
+
+    if not code:
+        chars = string.ascii_uppercase + string.digits
+        while True:
+            code = ''.join(random.choices(chars, k=4)) + '-' + ''.join(random.choices(chars, k=4))
+            if not GiftCode.objects.filter(code=code).exists():
+                break
+
+    if not amount or not expires_at:
+        messages.warning(request, 'Code, amount and expiry date are required.')
+        return HttpResponseRedirect('/account/#admin')
+
+    try:
+        amount = Decimal(amount)
+        if amount <= 0:
+            raise ValueError
+    except Exception:
+        messages.warning(request, 'Invalid amount.')
+        return HttpResponseRedirect('/account/#admin')
+
+    try:
+        from django.utils.dateparse import parse_datetime, parse_date
+        import datetime
+        dt = parse_datetime(expires_at) or datetime.datetime.combine(
+            parse_date(expires_at), datetime.time(23, 59, 59),
+            tzinfo=timezone.get_current_timezone()
+        )
+        if dt is None:
+            raise ValueError
+    except Exception:
+        messages.warning(request, 'Invalid expiry date.')
+        return HttpResponseRedirect('/account/#admin')
+
+    try:
+        vd = int(validity_days) if validity_days else None
+    except ValueError:
+        messages.warning(request, 'Invalid validity days.')
+        return HttpResponseRedirect('/account/#admin')
+
+    if GiftCode.objects.filter(code=code).exists():
+        messages.warning(request, f'Code "{code}" already exists.')
+        return HttpResponseRedirect('/account/#admin')
+
+    GiftCode.objects.create(
+        code=code,
+        description=description,
+        amount=amount,
+        expires_at=dt,
+        validity_days=vd,
+    )
+    messages.success(request, f'Gift code "{code}" created (${amount:.2f}).')
+    return HttpResponseRedirect('/account/#admin')
 
 
 #=========================
