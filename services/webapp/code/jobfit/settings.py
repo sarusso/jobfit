@@ -83,7 +83,7 @@ STATIC_ROOT = '/jobfit/static'
 
 # Project settings
 MAIN_DOMAIN_NAME = os.environ.get('MAIN_DOMAIN_NAME', 'http://localhost')
-CONTACT_EMAIL    = os.environ.get('CONTACT_EMAIL', 'contact@jobfit.app')
+CONTACT_EMAIL    = os.environ.get('CONTACT_EMAIL', 'contact@jobfit.fyi')
 INVITATION_CODE  = os.environ.get('INVITATION_CODE', None)
 
 # Jobs app settings
@@ -108,7 +108,7 @@ EMAIL_USE_TLS       = booleanize(os.environ.get('DJANGO_EMAIL_USE_TLS', True))
 EMAIL_USE_SSL       = booleanize(os.environ.get('DJANGO_EMAIL_USE_SSL', False))
 EMAIL_HOST_USER     = os.environ.get('DJANGO_EMAIL_HOST_USER', None)
 EMAIL_HOST_PASSWORD = os.environ.get('DJANGO_EMAIL_HOST_PASSWORD', None)
-DEFAULT_FROM_EMAIL  = os.environ.get('DJANGO_EMAIL_FROM', 'JobFit <notifications@jobfit.app>')
+DEFAULT_FROM_EMAIL  = os.environ.get('DJANGO_EMAIL_FROM', 'JobFit <notifications@jobfit.fyi>')
 
 # Logging
 DJANGO_LOG_LEVEL = os.environ.get('DJANGO_LOG_LEVEL', 'ERROR')

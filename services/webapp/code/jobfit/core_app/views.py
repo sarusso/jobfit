@@ -150,6 +150,23 @@ def user_logout(request):
 
 
 #=========================
+#  Demo login
+#=========================
+
+def demo_login(request):
+    if request.user.is_authenticated and not request.user.is_demo:
+        return render(request, 'error.html', {'data': {'error': 'You are already logged in. Please log out first to access the demo.'}}, status=403)
+    from .models import User as AppUser
+    try:
+        demo_user = AppUser.objects.get(is_demo=True)
+    except AppUser.DoesNotExist:
+        return HttpResponse("No demo account configured.", status=404)
+    demo_user.backend = 'django.contrib.auth.backends.ModelBackend'
+    login(request, demo_user)
+    return HttpResponseRedirect('/')
+
+
+#=========================
 #  Register
 #=========================
 

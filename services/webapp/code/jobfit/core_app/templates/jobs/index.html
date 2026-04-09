@@ -93,8 +93,11 @@
             <a href="{% url 'jobs_company' company.slug %}" class="text-decoration-none text-muted fw-bold fs-5 stretched-link">
               {{ company.name }}
             </a>
+            {% if company.description %}
+            <p class="text-muted small mb-0 mt-1">{{ company.description }}</p>
+            {% endif %}
           </div>
-          <span class="badge bg-secondary">{{ company.jobs.count }} role{{ company.jobs.count|pluralize }}</span>
+          <span class="badge bg-secondary flex-shrink-0">{{ company.jobs.count }} role{{ company.jobs.count|pluralize }}</span>
         </div>
       </div>
     </div>

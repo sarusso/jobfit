@@ -12,8 +12,9 @@ logger = logging.getLogger(__name__)
 
 
 class User(AbstractUser):
-    id    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(unique=True)
+    id      = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email   = models.EmailField(unique=True)
+    is_demo = models.BooleanField(default=False)
 
 
 class LoginToken(models.Model):

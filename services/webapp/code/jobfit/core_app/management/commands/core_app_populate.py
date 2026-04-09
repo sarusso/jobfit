@@ -6,6 +6,12 @@ from django.conf import settings
 
 from ...models import User, Profile, LLMPricing, Company, Job, CV, Score
 
+DEMO_USERNAME  = 'aB3kXm9pQr7nYw2vLs'   # fixed 18-char slug, same format as random_username()
+DEMO_EMAIL     = 'demo@jobfit.fyi'
+ADMIN_USERNAME = 'admin'
+ADMIN_EMAIL    = 'admin@jobfit.fyi'
+ADMIN_PASSWORD = 'admin'
+
 
 # ---------------------------------------------------------------------------
 # Demo CV content
@@ -142,6 +148,7 @@ def _build_cv_pdf(path: Path):
         pdf.set_text_color(0, 0, 0)
         pdf.set_font('Helvetica', '', 9)
         for b in exp['bullets']:
+            pdf.set_x(pdf.l_margin)
             pdf.cell(6, 4.5, '')
             pdf.multi_cell(w - 6, 4.5, s('- ' + b))
         pdf.ln(2)
@@ -371,6 +378,7 @@ COMPANIES = [
                     'Exposure to event-driven architecture (Kafka, SQS)',
                 ],
                 'source': 'text',
+                'archived': True,
             },
         ],
     },
@@ -456,6 +464,92 @@ COMPANIES = [
                 'nice_to_have': [
                     'Experience with Snowflake, BigQuery, or Databricks',
                     'Familiarity with data contracts or data mesh principles',
+                ],
+                'source': 'text',
+            },
+        ],
+    },
+    {
+        'slug': 'retailcorp',
+        'name': 'RetailCorp',
+        'archived': True,
+        'description': (
+            'RetailCorp is a large UK retail chain with 500+ stores, undergoing a '
+            'digital transformation. 5,000 employees. The engineering team is small '
+            'relative to the business and works primarily with legacy Java systems.'
+        ),
+        'jobs': [
+            {
+                'title': 'Java Backend Developer',
+                'location': 'Manchester',
+                'employment_type': 'full-time',
+                'experience_level': 'mid',
+                'salary': '£45,000 – £60,000 a year',
+                'summary': (
+                    'Maintain and extend our core inventory and order management '
+                    'systems built on Java and Oracle.'
+                ),
+                'description': (
+                    'RetailCorp is looking for a Java Backend Developer to join the '
+                    'central engineering team. You will maintain and extend the legacy '
+                    'inventory and order management systems that power our 500+ stores. '
+                    'The role is primarily in Java 8/11 with Oracle databases and '
+                    'on-premise infrastructure.'
+                ),
+                'responsibilities': [
+                    'Maintain and extend Java-based inventory and OMS systems',
+                    'Write and debug PL/SQL stored procedures in Oracle',
+                    'Integrate with third-party logistics and ERP systems',
+                    'Participate in a weekly on-call rota',
+                    'Document changes and produce test plans for QA',
+                ],
+                'requirements': [
+                    '3+ years Java development experience (Java 8 or 11)',
+                    'Experience with Oracle databases and PL/SQL',
+                    'Understanding of enterprise integration patterns (ESB, MQ)',
+                    'Familiarity with on-premise deployment and release management',
+                    'Strong debugging and legacy-code comprehension skills',
+                ],
+                'nice_to_have': [
+                    'Retail or supply-chain domain experience',
+                    'Exposure to SAP or similar ERP systems',
+                ],
+                'source': 'text',
+            },
+            {
+                'title': 'IT Project Manager',
+                'location': 'Manchester',
+                'employment_type': 'full-time',
+                'experience_level': 'mid',
+                'salary': '£50,000 – £65,000 a year',
+                'summary': (
+                    'Lead delivery of IT projects across our store operations and '
+                    'back-office systems.'
+                ),
+                'description': (
+                    'The IT Project Manager will manage end-to-end delivery of '
+                    'technology projects across RetailCorp\'s store estate and '
+                    'head office systems. You will coordinate vendors, internal '
+                    'stakeholders, and the IT team to deliver on time and within budget. '
+                    'This is a largely non-technical, delivery-focused role.'
+                ),
+                'responsibilities': [
+                    'Own project plans, budgets, and status reporting for IT initiatives',
+                    'Coordinate third-party vendors and internal delivery teams',
+                    'Run steering committee meetings and produce board-level updates',
+                    'Manage risks, issues, and dependencies across concurrent projects',
+                    'Drive change management and business readiness activities',
+                ],
+                'requirements': [
+                    '3+ years IT project management experience',
+                    'PRINCE2 or PMP certification',
+                    'Experience managing third-party vendors and contracts',
+                    'Strong stakeholder management and communication skills',
+                    'Proficiency with MS Project or similar PM tooling',
+                ],
+                'nice_to_have': [
+                    'Retail or FMCG industry experience',
+                    'Familiarity with ITIL or service management frameworks',
                 ],
                 'source': 'text',
             },
@@ -754,6 +848,84 @@ SCORES = {
             ],
         },
     },
+    ('retailcorp', 'Java Backend Developer'): {
+        'normal': {
+            'score': 3,
+            'reasoning': (
+                'The candidate is a Python/cloud specialist with no Java experience '
+                'evidenced anywhere in the CV. The role is squarely in Java 8/11 and '
+                'Oracle on-premise — a fundamentally different stack. The engineering '
+                'depth is there but is not transferable without significant retraining.'
+            ),
+            'strengths': [
+                'General backend engineering fundamentals transfer to some degree',
+                'Experience with relational databases (PostgreSQL) partially relevant',
+            ],
+            'gaps': [
+                'No Java experience of any kind evidenced',
+                'No Oracle or PL/SQL experience',
+                'No on-premise or legacy systems background',
+                'Enterprise integration (ESB, MQ) not mentioned',
+                'Retail or supply-chain domain knowledge absent',
+            ],
+        },
+        'brutal': {
+            'score': 1,
+            'reasoning': (
+                'Wrong stack entirely. This is a Java/Oracle role; the candidate is '
+                'Python/AWS. There is no overlap in the primary technical requirements. '
+                'Applying would be wasting both parties\' time.'
+            ),
+            'strengths': [
+                'Strong engineer in general — but in the wrong language and paradigm',
+            ],
+            'gaps': [
+                'Java: not present',
+                'Oracle/PL/SQL: not present',
+                'On-premise legacy systems: not present',
+                'Domain knowledge: not present',
+            ],
+        },
+    },
+    ('retailcorp', 'IT Project Manager'): {
+        'normal': {
+            'score': 2,
+            'reasoning': (
+                'This is a non-technical delivery and project management role. The '
+                'candidate has no PM certifications, no vendor management experience, '
+                'and no evidence of running steering committees or board reporting. '
+                'The engineering background is a poor fit for what is essentially a '
+                'business-facing programme manager position.'
+            ),
+            'strengths': [
+                'Has coordinated cross-team work in an engineering context',
+                'Led a team, which shows some organisational skill',
+            ],
+            'gaps': [
+                'No PRINCE2 or PMP certification',
+                'No IT project management experience in a formal sense',
+                'No vendor or contract management background',
+                'No board-level reporting or steering committee experience',
+                'Role is delivery/management focused, not engineering',
+            ],
+        },
+        'brutal': {
+            'score': 1,
+            'reasoning': (
+                'Career mismatch. The candidate is a hands-on engineer; this role '
+                'requires no coding and is centred on stakeholder management, vendor '
+                'coordination, and formal PM methodology. The skill sets do not overlap.'
+            ),
+            'strengths': [
+                'None that are material to this specific role',
+            ],
+            'gaps': [
+                'Not a project manager — is a software engineer',
+                'No PM methodology certification',
+                'No delivery or governance framework experience',
+            ],
+        },
+    },
     ('fintechltd', 'Senior Backend Engineer'): {
         'normal': {
             'score': 6,
@@ -803,28 +975,43 @@ class Command(BaseCommand):
     help = 'Populate development database with demo data.'
 
     def handle(self, *args, **options):
-        self._ensure_testuser()
+        self._ensure_demo_user()
+        self._ensure_admin_user()
         self._ensure_llm_pricing()
         self._ensure_demo_data()
 
     # ------------------------------------------------------------------
 
-    def _ensure_testuser(self):
-        try:
-            User.objects.get(username='testuser')
-            print('Test user already exists, skipping.')
-        except User.DoesNotExist:
-            print('Creating test user...')
-            testuser = User.objects.create_user('testuser', 'testuser@jobfit.app', 'testpass')
-            testuser.is_staff = True
-            testuser.is_superuser = True
-            testuser.save()
-            Profile.objects.create(
-                user=testuser,
-                email_updates=False,
-                last_accepted_terms=settings.TERMS_VERSION,
-            )
-            print('Done. Email: testuser@jobfit.app  Password: testpass')
+    def _ensure_demo_user(self):
+        if User.objects.filter(email=DEMO_EMAIL).exists():
+            print(f'Demo user already exists ({DEMO_EMAIL}), skipping.')
+            return
+        print('Creating demo user...')
+        user = User.objects.create_user(DEMO_USERNAME, DEMO_EMAIL, password=None)
+        user.is_demo = True
+        user.save()
+        Profile.objects.create(
+            user=user,
+            email_updates=False,
+            last_accepted_terms=settings.TERMS_VERSION,
+        )
+        print(f'Done. Demo login: /demo/')
+
+    def _ensure_admin_user(self):
+        if User.objects.filter(username=ADMIN_USERNAME).exists():
+            print(f'Admin user already exists ({ADMIN_USERNAME}), skipping.')
+            return
+        print('Creating admin user...')
+        user = User.objects.create_user(ADMIN_USERNAME, ADMIN_EMAIL, ADMIN_PASSWORD)
+        user.is_staff = True
+        user.is_superuser = True
+        user.save()
+        Profile.objects.create(
+            user=user,
+            email_updates=False,
+            last_accepted_terms=settings.TERMS_VERSION,
+        )
+        print(f'Done. Email: {ADMIN_EMAIL}  Password: {ADMIN_PASSWORD}')
 
     def _ensure_llm_pricing(self):
         _PRICING = [
@@ -840,9 +1027,9 @@ class Command(BaseCommand):
 
     def _ensure_demo_data(self):
         try:
-            user = User.objects.get(username='testuser')
+            user = User.objects.get(email=DEMO_EMAIL)
         except User.DoesNotExist:
-            print('testuser not found, skipping demo data.')
+            print(f'Demo user ({DEMO_EMAIL}) not found, skipping demo data.')
             return
 
         cv = self._ensure_cv(user)
@@ -889,12 +1076,13 @@ class Command(BaseCommand):
                 user=user,
                 slug=co_data['slug'],
                 defaults={
-                    'name': co_data['name'],
+                    'name':        co_data['name'],
                     'description': co_data['description'],
+                    'archived':    co_data.get('archived', False),
                 },
             )
             if created:
-                print(f'Created company: {company.name}')
+                print(f'Created company: {company.name}{"  [archived]" if company.archived else ""}')
             else:
                 print(f'Company already exists: {company.name}, skipping jobs.')
                 continue
@@ -913,8 +1101,9 @@ class Command(BaseCommand):
                     requirements=job_data.get('requirements', []),
                     nice_to_have=job_data.get('nice_to_have', []),
                     source=job_data.get('source', 'text'),
+                    archived=job_data.get('archived', False),
                 )
-                print(f'  Created job: {job.title}')
+                print(f'  Created job: {job.title}{"  [archived]" if job.archived else ""}')
 
                 score_data = SCORES.get((co_data['slug'], job_data['title']))
                 if score_data:

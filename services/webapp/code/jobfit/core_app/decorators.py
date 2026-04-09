@@ -79,6 +79,11 @@ def private_view(wrapped_view):
     def private_view_wrapper(request, *argv, **kwargs):
         if request.user.is_authenticated:
             # -------------- START Public/private common code --------------
+
+            # Demo user: block all writes
+            if request.method == "POST" and request.user.is_demo:
+                return HttpResponseRedirect(request.META.get("HTTP_REFERER", "/"))
+
             log_user_activity("DEBUG", "Called", request, wrapped_view.__name__)
             try:
 

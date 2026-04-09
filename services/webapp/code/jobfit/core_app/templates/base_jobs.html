@@ -47,6 +47,12 @@
   </style>
 </head>
 <body>
+  {% if request.user.is_demo %}
+  <div class="text-center py-2 small" style="background:#fff3cd;color:#856404;border-bottom:1px solid #ffc107">
+    &#128274; This is a <strong>read-only demo</strong> — no changes can be saved nor actions performed. <a href="/logout/" class="ms-2" style="color:#856404">Logout</a>
+  </div>
+  {% endif %}
+
   <nav class="navbar navbar-dark bg-dark mb-4">
     <div class="container d-flex align-items-center gap-3 position-relative">
       <a class="navbar-brand me-0" href="{% url 'jobs_index' %}">&#128084; JobFit</a>

@@ -9,7 +9,9 @@ admin.site.unregister(Group)
 
 
 class UserAdmin(BaseUserAdmin):
-    pass
+    fieldsets = BaseUserAdmin.fieldsets + (
+        ('Demo', {'fields': ('is_demo',)}),
+    )
 
 
 admin.site.register(User, UserAdmin)
