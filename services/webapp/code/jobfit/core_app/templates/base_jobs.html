@@ -40,6 +40,10 @@
       border-radius: 50%; animation: spin .8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 991.98px) {
+      .btn-sm-on-mobile { width: 100%; }
+      .btn-sm-on-mobile .btn { font-size: .82rem; padding: .3rem .6rem; }
+    }
   </style>
 </head>
 <body>
@@ -47,8 +51,8 @@
     <div class="container d-flex align-items-center gap-3 position-relative">
       <a class="navbar-brand me-0" href="{% url 'jobs_index' %}">&#128084; JobFit</a>
 
-      {# ── Scoring toggles — absolutely centred ── #}
-      <div class="position-absolute start-50 translate-middle-x d-flex align-items-center gap-2 px-3 py-1 rounded" style="background:rgba(255,255,255,.07)">
+      {# ── Scoring toggles — absolutely centred (hidden on mobile) ── #}
+      <div class="position-absolute start-50 translate-middle-x d-none d-md-flex align-items-center gap-2 px-3 py-1 rounded" style="background:rgba(255,255,255,.07)">
         <span class="text-white-50 me-1" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;font-weight:600">Scoring</span>
         <form action="{% url 'jobs_set_mode' %}" method="post" id="modeForm" class="d-flex align-items-center gap-2 m-0">
           {% csrf_token %}
@@ -76,15 +80,15 @@
       {# ── Notes button ── #}
       <button type="button" class="btn btn-sm {% if candidate_notes %}btn-warning{% else %}btn-outline-light{% endif %} ms-auto"
               data-bs-toggle="modal" data-bs-target="#notesModal"
-              title="{% if candidate_notes %}Personal notes active — included in every score{% else %}Add personal notes to improve scoring{% endif %}">&#128221; Notes</button>
+              title="{% if candidate_notes %}Personal notes active — included in every score{% else %}Add personal notes to improve scoring{% endif %}">&#128221;<span class="d-none d-md-inline"> Notes</span></button>
 
       {# ── CV button ── #}
       <button type="button" class="btn btn-sm {% if cv_uploaded %}btn-success{% else %}btn-outline-warning{% endif %}"
-              data-bs-toggle="modal" data-bs-target="#cvModal">&#128196; CV</button>
+              data-bs-toggle="modal" data-bs-target="#cvModal">&#128196;<span class="d-none d-md-inline"> CV</span></button>
 
       {# ── Add Jobs button ── #}
       <button type="button" class="btn btn-sm btn-outline-light"
-              data-bs-toggle="modal" data-bs-target="#addJobsModal">&#10010; Jobs</button>
+              data-bs-toggle="modal" data-bs-target="#addJobsModal">&#10010;<span class="d-none d-md-inline"> Jobs</span></button>
 
       {# ── Hamburger ── #}
       <button class="btn btn-sm btn-outline-light" type="button"
@@ -108,6 +112,30 @@
         <a class="nav-link px-4 py-2" href="/account/">&#128100; Account</a>
         <a class="nav-link px-4 py-2" href="/logout/">&#128275; Logout</a>
       </nav>
+      {# ── Scoring toggles visible only on mobile ── #}
+      <div class="d-md-none px-4 pt-3 pb-2 border-top mt-2">
+        <div class="text-muted mb-2" style="font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;font-weight:600">Scoring</div>
+        <form action="{% url 'jobs_set_mode' %}" method="post" class="d-flex align-items-center gap-2 mb-2">
+          {% csrf_token %}
+          <input type="hidden" name="mode" value="{{ scoring_mode }}">
+          <label for="modeToggleMobile" class="small mb-0" style="cursor:pointer">Brutal mode</label>
+          <div class="form-check form-switch m-0 ms-auto">
+            <input class="form-check-input" type="checkbox" id="modeToggleMobile"
+                   {% if scoring_mode == "brutal" %}checked{% endif %}
+                   onchange="this.closest('form').querySelector('[name=mode]').value=this.checked?'brutal':'normal'; this.closest('form').submit()">
+          </div>
+        </form>
+        <form action="{% url 'jobs_set_notes' %}" method="post" class="d-flex align-items-center gap-2">
+          {% csrf_token %}
+          <input type="hidden" name="use_notes" value="{% if use_notes %}1{% else %}0{% endif %}">
+          <label for="notesToggleMobile" class="small mb-0" style="cursor:pointer">Use notes</label>
+          <div class="form-check form-switch m-0 ms-auto">
+            <input class="form-check-input" type="checkbox" id="notesToggleMobile"
+                   {% if use_notes %}checked{% endif %}
+                   onchange="this.closest('form').querySelector('[name=use_notes]').value=this.checked?'1':'0'; this.closest('form').submit()">
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
