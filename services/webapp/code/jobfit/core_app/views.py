@@ -44,8 +44,6 @@ ONGOING_SIGNUPS = {}
 
 @public_view
 def home(request):
-    if request.user.is_authenticated:
-        return HttpResponseRedirect('/jobs/')
     data = {'user': request.user}
     return render(request, 'home.html', {'data': data})
 
@@ -163,7 +161,7 @@ def demo_login(request):
         return HttpResponse("No demo account configured.", status=404)
     demo_user.backend = 'django.contrib.auth.backends.ModelBackend'
     login(request, demo_user)
-    return HttpResponseRedirect('/')
+    return HttpResponseRedirect('/jobs/')
 
 
 #=========================
@@ -461,6 +459,11 @@ def create_gift_code(request):
 #=========================
 #  Privacy / Terms
 #=========================
+
+@public_view
+def about(request):
+    return render(request, 'about.html', {'data': {'user': request.user}})
+
 
 @public_view
 def privacy(request):

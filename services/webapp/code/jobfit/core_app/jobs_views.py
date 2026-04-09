@@ -28,7 +28,7 @@ from django.http import (FileResponse, Http404, HttpResponse,
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
-from .decorators import private_view
+from .decorators import private_view, public_view
 from .models import CV, Company, Job, Notes, Score, LLMPricing, Profile, TopUp, UsageLog
 
 log = logging.getLogger(__name__)
@@ -502,7 +502,7 @@ def set_notes_mode(request):
 # Views — browsing                                                    #
 # ------------------------------------------------------------------ #
 
-@private_view
+@public_view
 def help_page(request):
     return render(request, "jobs/help.html")
 

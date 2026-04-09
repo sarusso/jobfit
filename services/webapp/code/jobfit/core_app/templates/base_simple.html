@@ -9,6 +9,10 @@
   <style>
     body { background: #f8f9fa; }
     .navbar-brand { font-weight: 700; letter-spacing: .03em; }
+    .score-high { background: #d4edda; color: #155724; }
+    .score-mid  { background: #fff3cd; color: #856404; }
+    .score-low  { background: #f8d7da; color: #721c24; }
+    .score-none { background: #e9ecef; color: #6c757d; }
   </style>
 </head>
 <body>
@@ -16,17 +20,33 @@
     <div class="container">
       <a class="navbar-brand" href="/">&#128084; JobFit</a>
       <div class="d-flex gap-2">
-        {% if user.is_authenticated %}
-          <a href="/jobs/" class="btn btn-sm btn-outline-light">&#128188; Jobs</a>
-          <a href="/account/" class="btn btn-sm btn-outline-light">&#128100; Account</a>
-          <a href="/logout/" class="btn btn-sm btn-outline-light">Logout</a>
-        {% else %}
-          <a href="/login/" class="btn btn-sm btn-outline-light">Login</a>
-          <a href="/register/" class="btn btn-sm btn-outline-light">Sign up</a>
-        {% endif %}
+        <button class="btn btn-sm btn-outline-light" type="button"
+                data-bs-toggle="offcanvas" data-bs-target="#sideMenuSimple">&#9776;</button>
       </div>
     </div>
   </nav>
+
+  <div class="offcanvas offcanvas-end" tabindex="-1" id="sideMenuSimple" style="max-width:260px">
+    <div class="offcanvas-header border-bottom">
+      <span class="fw-bold">&#128084; JobFit</span>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body p-0">
+      <nav class="nav flex-column pt-2">
+        <a class="nav-link px-4 py-2" href="/">&#127760; Main</a>
+        <a class="nav-link px-4 py-2" href="/help/">&#10067; Help</a>
+        <hr class="my-1 mx-4">
+        {% if user.is_authenticated %}
+          <a class="nav-link px-4 py-2" href="/jobs/">&#128188; Jobs</a>
+          <a class="nav-link px-4 py-2" href="/account/">&#128100; Account</a>
+          <a class="nav-link px-4 py-2" href="/logout/">&#128275; Logout</a>
+        {% else %}
+          <a class="nav-link px-4 py-2" href="/login/">&#128272; Login</a>
+          <a class="nav-link px-4 py-2" href="/register/">&#10133; Sign up</a>
+        {% endif %}
+      </nav>
+    </div>
+  </div>
 
   {% if messages %}
   <div class="container mb-3">

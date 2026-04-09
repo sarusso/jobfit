@@ -1,4 +1,4 @@
-{% extends "base_jobs.html" %}
+{% extends "base_simple.html" %}
 {% block title %}JobFit — Help{% endblock %}
 
 {% block content %}
@@ -10,7 +10,7 @@
 <div class="card shadow-sm mb-4">
   <div class="card-header fw-bold">CV Match Scoring</div>
   <div class="card-body">
-    <p>When a CV is uploaded and <code>OPENAI_KEY</code> is configured, each job description can be scored against your CV using <strong>GPT-4o</strong>. Scores are <em>absolute</em> — they reflect fit against the role independently, not relative to other jobs.</p>
+    <p>When a CV is uploaded, each job description can be scored against it using AI. Scores are <em>absolute</em> — they reflect fit against the role independently, not relative to other jobs.</p>
     <p>Two scoring modes are available via the <strong>Brutal mode</strong> toggle in the navbar. Each mode has its own cached score per job, so switching modes never overwrites the other. Scores are invalidated automatically when you upload a new CV.</p>
     <p><strong>Score all vs CV</strong> on the company page only scores jobs that are <em>missing</em> a score for the current mode. Use the per-job <em>Re-score</em> button to force a fresh score.</p>
 
@@ -43,8 +43,6 @@
   <div class="card-header fw-bold">Setup</div>
   <div class="card-body">
     <dl class="mb-0">
-      <dt>OpenAI Key</dt>
-      <dd class="mb-3">Set the <code>OPENAI_KEY</code> environment variable to enable scoring and JD analysis.</dd>
       <dt>CV</dt>
       <dd class="mb-3">Upload your CV as a PDF using the <strong>CV</strong> button in the navbar. You can manage multiple CVs and switch between them — cached scores are stored per CV.</dd>
       <dt>Personal Notes</dt>

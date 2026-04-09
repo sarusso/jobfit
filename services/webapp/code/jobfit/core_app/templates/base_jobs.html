@@ -48,13 +48,7 @@
   </style>
 </head>
 <body>
-  {% if request.user.is_demo %}
-  <div class="text-center py-2 small" style="background:#fff3cd;color:#856404;border-bottom:1px solid #ffc107">
-    &#128274; This is a <strong>read-only demo</strong> — no changes can be saved nor actions performed. <a href="/logout/" class="ms-2" style="color:#856404">Logout</a>
-  </div>
-  {% endif %}
-
-  <nav class="navbar navbar-dark bg-dark mb-4">
+  <nav class="navbar navbar-dark bg-dark {% if not request.user.is_demo %}mb-4{% endif %}">
     <div class="container d-flex align-items-center gap-3 position-relative">
       <a class="navbar-brand me-0" href="{% url 'jobs_index' %}">&#128084; JobFit</a>
 
@@ -105,6 +99,12 @@
     </div>
   </nav>
 
+  {% if request.user.is_demo %}
+  <div class="text-center py-2 small mb-4" style="background:#fff3cd;color:#856404;border-bottom:1px solid #ffc107">
+    &#128274; This is a <strong>read-only demo</strong> — no changes can be saved nor actions performed. <a href="/logout/" class="ms-2" style="color:#856404">Logout</a>
+  </div>
+  {% endif %}
+
   {# ── Side menu offcanvas ── #}
   <div class="offcanvas offcanvas-end" tabindex="-1" id="sideMenu" style="max-width:260px">
     <div class="offcanvas-header border-bottom">
@@ -113,9 +113,10 @@
     </div>
     <div class="offcanvas-body p-0">
       <nav class="nav flex-column pt-2">
-        <a class="nav-link px-4 py-2" href="{% url 'jobs_index' %}">&#127968; Home</a>
+        <a class="nav-link px-4 py-2" href="/">&#127760; Main</a>
         <a class="nav-link px-4 py-2" href="{% url 'jobs_help' %}">&#10067; Help</a>
         <hr class="my-1 mx-4">
+        <a class="nav-link px-4 py-2" href="{% url 'jobs_index' %}">&#128188; Jobs</a>
         <a class="nav-link px-4 py-2" href="/account/">&#128100; Account</a>
         <a class="nav-link px-4 py-2" href="/logout/">&#128275; Logout</a>
       </nav>

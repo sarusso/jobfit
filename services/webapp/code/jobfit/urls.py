@@ -25,8 +25,9 @@ urlpatterns = [
     url(r'^account/$',                    views.account),
     url(r'^account/redeem/$',             views.redeem_gift_code),
     url(r'^account/admin/create-code/$',  views.create_gift_code),
-    url(r'^privacy/$',   views.privacy),
-    url(r'^terms/$',     views.terms),
+    url(r'^about/$',     views.about),
+    url(r'^privacy/$',  views.privacy),
+    url(r'^terms/$',    views.terms),
 
     # Jobs app — settings
     path('jobs/notes/save/',  jobs_views.notes_save,     name='jobs_notes_save'),
@@ -62,7 +63,7 @@ urlpatterns = [
     path('jobs/unarchive/<slug:company_slug>/',               jobs_views.unarchive_company, name='jobs_unarchive_company'),
 
     # Jobs app — browsing
-    path('jobs/help/',                                          jobs_views.help_page,    name='jobs_help'),
+    path('help/',                                               jobs_views.help_page,    name='jobs_help'),
     path('jobs/',                                               jobs_views.index,        name='jobs_index'),
     path('jobs/<slug:company_slug>/<uuid:job_id>/pdf/',         jobs_views.job_pdf,      name='jobs_job_pdf'),
     path('jobs/<slug:company_slug>/<uuid:job_id>/',             jobs_views.job_view,     name='jobs_job'),
