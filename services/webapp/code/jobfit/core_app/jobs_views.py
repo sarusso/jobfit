@@ -146,24 +146,25 @@ def _jobs_dir(data_dir: Path) -> Path:
 
 
 # ------------------------------------------------------------------ #
-# Session helpers                                                     #
+# Profile helpers (previously session-based)                          #
 # ------------------------------------------------------------------ #
 
 def _current_mode(request) -> str:
-    return request.session.get("scoring_mode", "normal")
+    return request.user.profile.scoring_mode or 'normal'
 
 def _use_notes(request) -> bool:
-    return request.session.get("use_notes", False)
+    return request.user.profile.use_notes
 
 def _get_selected_cv(request):
-    """Return the selected CV model instance, or None."""
-    cv_id = request.session.get("selected_cv_id")
-    if not cv_id:
-        return None
-    try:
-        return CV.objects.get(id=cv_id, user=request.user)
-    except CV.DoesNotExist:
-        return None
+    """Return the profile's selected CV, falling back to the most recently uploaded."""
+    cv = request.user.profile.selected_cv
+    if cv:
+        return cv
+    cv = CV.objects.filter(user=request.user).order_by('-uploaded_at').first()
+    if cv:
+        request.user.profile.selected_cv = cv
+        request.user.profile.save(update_fields=['selected_cv'])
+    return cv
 
 def _get_notes_text(request) -> str:
     try:
@@ -485,13 +486,15 @@ def notes_save(request):
 @private_view
 def set_mode(request):
     mode = request.POST.get("mode", "normal")
-    request.session["scoring_mode"] = mode if mode in ("normal", "brutal") else "normal"
+    request.user.profile.scoring_mode = mode if mode in ("normal", "brutal") else "normal"
+    request.user.profile.save(update_fields=['scoring_mode'])
     return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
 
 
 @private_view
 def set_notes_mode(request):
-    request.session["use_notes"] = request.POST.get("use_notes") == "1"
+    request.user.profile.use_notes = request.POST.get("use_notes") == "1"
+    request.user.profile.save(update_fields=['use_notes'])
     return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
 
 
@@ -604,14 +607,16 @@ def cv_upload(request):
 
     name = Path(f.name).stem.replace("_", " ").replace("-", " ").strip() or "CV"
     cv = CV.objects.create(user=request.user, hash=h, name=name, file_path=file_path)
-    request.session["selected_cv_id"] = str(cv.id)
+    request.user.profile.selected_cv = cv
+    request.user.profile.save(update_fields=['selected_cv'])
     return _modal_cv_redirect(request)
 
 
 @private_view
 def cv_select(request, cv_id):
     cv = get_object_or_404(CV, id=cv_id, user=request.user)
-    request.session["selected_cv_id"] = str(cv.id)
+    request.user.profile.selected_cv = cv
+    request.user.profile.save(update_fields=['selected_cv'])
     return _modal_cv_redirect(request)
 
 
@@ -629,9 +634,10 @@ def cv_delete(request, cv_id):
     p = data_dir / cv.file_path
     if p.exists():
         p.unlink()
-    if request.session.get("selected_cv_id") == str(cv.id):
+    if request.user.profile.selected_cv_id == cv.id:
         next_cv = CV.objects.filter(user=request.user).exclude(id=cv.id).first()
-        request.session["selected_cv_id"] = str(next_cv.id) if next_cv else None
+        request.user.profile.selected_cv = next_cv
+        request.user.profile.save(update_fields=['selected_cv'])
     cv.delete()
     return _modal_cv_redirect(request)
 

@@ -35,6 +35,9 @@ class Profile(models.Model):
     last_accepted_terms   = models.FloatField('Last accepted TOS', default=0)
     last_accepted_privacy = models.FloatField('Last accepted Privacy Policy', default=0)
     usage                 = JSONField(default=dict, blank=True)
+    scoring_mode          = models.CharField(max_length=20, default='normal')
+    use_notes             = models.BooleanField(default=False)
+    selected_cv           = models.ForeignKey('CV', null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
 
     def get_balance(self) -> Decimal:
         result = TopUp.objects.filter(

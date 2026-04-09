@@ -7,13 +7,13 @@ def jobs_context(request):
     if not request.user.is_authenticated:
         return {}
 
-    selected_cv_id = request.session.get('selected_cv_id')
-    selected_cv = None
-    if selected_cv_id:
-        try:
-            selected_cv = CV.objects.get(id=selected_cv_id, user=request.user)
-        except CV.DoesNotExist:
-            pass
+    profile = request.user.profile
+    selected_cv = profile.selected_cv
+    if selected_cv is None:
+        selected_cv = CV.objects.filter(user=request.user).order_by('-uploaded_at').first()
+        if selected_cv:
+            profile.selected_cv = selected_cv
+            profile.save(update_fields=['selected_cv'])
 
     all_cvs = []
     for cv in CV.objects.filter(user=request.user).order_by('-uploaded_at'):
@@ -42,8 +42,8 @@ def jobs_context(request):
         "all_cvs":            all_cvs,
         "has_openai_key":     has_openai_key,
         "can_score":          selected_cv is not None and has_openai_key,
-        "scoring_mode":       request.session.get("scoring_mode", "normal"),
-        "use_notes":          request.session.get("use_notes", False),
+        "scoring_mode":       profile.scoring_mode or "normal",
+        "use_notes":          profile.use_notes,
         "existing_companies": existing_companies,
         "candidate_notes":    candidate_notes,
     }
