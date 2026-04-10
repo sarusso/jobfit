@@ -21,9 +21,13 @@
   .score-mid  { background: #fff3cd; color: #856404; border-radius: .4rem; padding: .15rem .5rem; font-weight: 700; }
   .score-low  { background: #f8d7da; color: #721c24; border-radius: .4rem; padding: .15rem .5rem; font-weight: 700; }
   @media (max-width: 767px) {
-    .hero { justify-content: flex-start; padding-top: 3rem; }
+    .hero { justify-content: flex-start; padding-top: 3rem; min-height: unset; }
     .hero-scores { margin-top: 3rem !important; padding-top: 0 !important; gap: .4rem !important; }
     .hero-scores .score-demo { padding: .4rem .7rem; }
+    .divider { margin-bottom: 1rem; }
+    .divider-lg { margin-bottom: 1.75rem; }
+    .how-it-works { padding-left: 1rem; padding-right: 1rem; }
+    .score-example-col { padding-left: .75rem !important; padding-right: .75rem !important; }
   }
 </style>
 
@@ -98,7 +102,7 @@
 <hr class="divider-lg">
 
 <!-- How it works -->
-<div class="row align-items-center g-5">
+<div class="row align-items-center g-5 how-it-works">
   <div class="col-lg-5">
     <div class="section-title">How it works</div>
     <p class="text-muted mb-4">From zero to scored in under a minute.</p>
@@ -124,8 +128,8 @@
       </div>
     </div>
   </div>
-  <div class="col-lg-7">
-    <div class="bg-white rounded-3 shadow-sm p-4">
+  <div class="col-lg-7 score-example-col">
+    <div class="bg-white rounded-3 shadow-sm p-4 score-example">
 
       {# Job header #}
       <div class="mb-3">
