@@ -14,7 +14,9 @@
   <div class="d-flex justify-content-between align-items-baseline flex-wrap gap-2">
     <h2 class="mb-0">{{ company.name }}</h2>
     <div class="d-flex align-items-center gap-3 flex-wrap">
-      <span class="text-muted">{{ active_jobs|length|add:archived_jobs|length }} role{% if active_jobs|length|add:archived_jobs|length != 1 %}s{% endif %}</span>
+      {% with ac=active_jobs|length ar=archived_jobs|length %}
+      <span class="text-muted">{{ ac|add:ar }} role{% if ac|add:ar != 1 %}s{% endif %}</span>
+      {% endwith %}
       <select id="sort-select" class="form-select form-select-sm" style="width:auto" onchange="sortJobs(this.value)">
         <option value="score-desc">Score ↓</option>
         <option value="score-asc">Score ↑</option>
@@ -162,5 +164,6 @@
     });
     cards.forEach(c => container.appendChild(c));
   }
+  sortJobs('score-desc');
 </script>
 {% endblock %}
