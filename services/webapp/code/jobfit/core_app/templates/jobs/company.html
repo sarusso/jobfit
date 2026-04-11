@@ -108,11 +108,12 @@
 {% endfor %}
 
 {% if archived_jobs %}
-<h6 class="text-muted mt-4 mb-3 border-bottom pb-2">Archived</h6>
+<h6 class="text-muted mt-5 mb-3 border-bottom pb-2 archived-sep">Archived</h6>
 {% for job in archived_jobs %}
 <div class="card job-card mb-3 shadow-sm position-relative"
      data-score="{{ job.score.score|default:"-1" }}"
-     data-title="{{ job.title|lower }}">
+     data-title="{{ job.title|lower }}"
+     data-archived="true">
   <div class="card-body">
     <div class="d-flex justify-content-between align-items-start flex-wrap flex-md-nowrap">
       <div class="flex-grow-1 me-md-3">
@@ -155,14 +156,18 @@
 <script>
   function sortJobs(mode) {
     const container = document.getElementById('jobs-container');
-    const cards = [...container.querySelectorAll('.job-card')];
-    cards.sort((a, b) => {
+    const sep       = container.querySelector('.archived-sep');
+    const active    = [...container.querySelectorAll('.job-card:not([data-archived])')];
+    const archived  = [...container.querySelectorAll('.job-card[data-archived]')];
+    active.sort((a, b) => {
       if (mode === 'score-desc') return b.dataset.score - a.dataset.score;
       if (mode === 'score-asc')  return a.dataset.score - b.dataset.score;
       if (mode === 'title-asc')  return a.dataset.title.localeCompare(b.dataset.title);
       if (mode === 'title-desc') return b.dataset.title.localeCompare(a.dataset.title);
     });
-    cards.forEach(c => container.appendChild(c));
+    active.forEach(c => container.appendChild(c));
+    if (sep) container.appendChild(sep);
+    archived.forEach(c => container.appendChild(c));
   }
   sortJobs('score-desc');
 </script>
