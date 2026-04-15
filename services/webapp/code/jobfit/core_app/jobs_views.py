@@ -29,7 +29,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 
 from .decorators import private_view, public_view
-from .models import CV, Company, Job, Notes, Score, LLMPricing, Profile, TopUp, UsageLog
+from .models import CV, Company, Job, KnownFit, Notes, Score, LLMPricing, Profile, TopUp, UsageLog
 
 log = logging.getLogger(__name__)
 
@@ -565,8 +565,12 @@ def job_view(request, company_slug, job_id):
     job.score   = job.scores.filter(cv=selected_cv, mode=mode).first() if selected_cv else None
     job.has_pdf = bool(job.source_file_path)
     job.all_scores = list(job.scores.select_related('cv').order_by('cv__name', 'mode'))
+    job.is_known_fit = (
+        KnownFit.objects.filter(user=request.user, job=job, cv=selected_cv).exists()
+        if selected_cv else False
+    )
 
-    return render(request, "jobs/job.html", {"company": company, "job": job})
+    return render(request, "jobs/job.html", {"company": company, "job": job, "selected_cv": selected_cv})
 
 
 @private_view
@@ -1145,6 +1149,28 @@ def score_company_stream(request, company_slug):
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"
     return response
+
+
+@private_view
+def toggle_known_fit(request, company_slug, job_id):
+    company     = get_object_or_404(Company, user=request.user, slug=company_slug)
+    job         = get_object_or_404(Job, company=company, id=job_id)
+    selected_cv = _get_selected_cv(request)
+    if not selected_cv:
+        messages.warning(request, "Select a CV to mark this role as a known fit.")
+        return HttpResponseRedirect(request.META.get(
+            "HTTP_REFERER", reverse("jobs_job", args=[company_slug, str(job.id)])
+        ))
+
+    existing = KnownFit.objects.filter(user=request.user, job=job, cv=selected_cv).first()
+    if existing:
+        existing.delete()
+    else:
+        KnownFit.objects.create(user=request.user, job=job, cv=selected_cv)
+
+    return HttpResponseRedirect(request.META.get(
+        "HTTP_REFERER", reverse("jobs_job", args=[company_slug, str(job.id)])
+    ))
 
 
 @private_view

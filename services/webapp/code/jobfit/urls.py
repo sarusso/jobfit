@@ -54,6 +54,7 @@ urlpatterns = [
     path('jobs/score/<slug:company_slug>/stream/', jobs_views.score_company_stream, name='jobs_score_stream'),
     path('jobs/score/<slug:company_slug>/clear/',  jobs_views.clear_scores,         name='jobs_score_clear'),
     path('jobs/score/<slug:company_slug>/<uuid:job_id>/', jobs_views.score_one,     name='jobs_score_one'),
+    path('jobs/known-fit/<slug:company_slug>/<uuid:job_id>/', jobs_views.toggle_known_fit, name='jobs_toggle_known_fit'),
 
     # Jobs app — archive / delete (before generic company routes)
     path('jobs/delete/<slug:company_slug>/<uuid:job_id>/',    jobs_views.delete_job,        name='jobs_delete'),

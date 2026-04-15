@@ -186,6 +186,21 @@
           </p>
         {% endif %}
 
+        <div class="border-top mt-3 pt-3">
+          <form action="{% url 'jobs_toggle_known_fit' company.slug job.id %}" method="post" class="m-0">
+            {% csrf_token %}
+            <div class="form-check small" title="{% if not selected_cv %}Select a CV to mark this role as a known fit{% else %}Mark this CV + role as a known fit for calibration{% endif %}">
+              <input class="form-check-input" type="checkbox" id="knownFitCheck"
+                     {% if job.is_known_fit %}checked{% endif %}
+                     {% if not selected_cv %}disabled{% endif %}
+                     onchange="this.form.submit()">
+              <label class="form-check-label text-muted" for="knownFitCheck">
+                Known fit &mdash; tick if you reached a late-stage interview or received an offer. Helps calibrate future scores.
+              </label>
+            </div>
+          </form>
+        </div>
+
         {% if job.all_scores %}
         <div class="border-top mt-3 pt-3">
           <div class="section-title mb-2">All scores</div>

@@ -201,3 +201,17 @@ class Score(models.Model):
 
     def __str__(self):
         return f'Score {self.score} for {self.job} with {self.cv}'
+
+
+class KnownFit(models.Model):
+    id        = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user      = models.ForeignKey('User', on_delete=models.CASCADE, related_name='known_fits')
+    job       = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='known_fits')
+    cv        = models.ForeignKey(CV, on_delete=models.CASCADE, related_name='known_fits')
+    marked_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'job', 'cv')
+
+    def __str__(self):
+        return f'KnownFit {self.job} / {self.cv}'
