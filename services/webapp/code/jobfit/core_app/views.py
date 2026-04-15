@@ -44,6 +44,10 @@ ONGOING_SIGNUPS = {}
 
 @public_view
 def home(request):
+    if 'nored' in request.GET and not request.user.is_authenticated:
+        return HttpResponseRedirect('/')
+    if request.user.is_authenticated and 'nored' not in request.GET:
+        return HttpResponseRedirect('/jobs/')
     data = {'user': request.user}
     return render(request, 'home.html', {'data': data})
 
