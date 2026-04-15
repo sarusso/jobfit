@@ -1,0 +1,206 @@
+{% extends "base_simple.html" %}
+{% block title %}JobFit - Backend{% endblock %}
+
+{% block content %}
+
+{# ── Section bar (styled like a notice bar) ── #}
+<div class="text-center py-2 small mb-4"
+     style="background:#e7f1ff;color:#0d47a1;border-bottom:1px solid #90caf9;border-left:1px solid #90caf9;border-right:1px solid #90caf9;margin:-1.5rem -1rem 1.5rem;">
+  {% for slug, label, url in data.sections %}
+    {% if slug == data.section %}
+      <span class="fw-bold">{{ label }}</span>
+    {% else %}
+      <a href="{{ url }}" style="color:#0d47a1;">{{ label }}</a>
+    {% endif %}
+    {% if not forloop.last %}<span class="mx-2 text-muted">&middot;</span>{% endif %}
+  {% endfor %}
+</div>
+
+<div class="row justify-content-center">
+<div class="col-lg-10">
+
+{% if data.section == 'home' %}
+  <div class="text-center text-muted py-5">
+    <p class="mb-0">Choose a page from the bar above.</p>
+  </div>
+
+{% elif data.section == 'gift-codes' %}
+<div class="card shadow-sm">
+  <div class="card-header fw-bold">Gift Codes</div>
+  <div class="card-body px-3 py-3">
+
+    <form action="/account/admin/create-code/" method="post" class="mb-4">
+      {% csrf_token %}
+      <div class="row g-2 align-items-end">
+        <div class="col-sm-2">
+          <label class="form-label small fw-semibold mb-1">Code</label>
+          <input type="text" name="code" class="form-control form-control-sm" placeholder="auto">
+        </div>
+        <div class="col-sm-3">
+          <label class="form-label small fw-semibold mb-1">Description</label>
+          <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. julia, second for matt">
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small fw-semibold mb-1">Amount ($)</label>
+          <input type="number" name="amount" class="form-control form-control-sm" placeholder="5.00" step="0.01" min="0.01" required>
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small fw-semibold mb-1">Redeem by</label>
+          <input type="date" name="expires_at" class="form-control form-control-sm" required>
+        </div>
+        <div class="col-sm-2">
+          <label class="form-label small fw-semibold mb-1">Valid days</label>
+          <input type="number" name="validity_days" class="form-control form-control-sm" placeholder="&#8734;" min="1">
+        </div>
+        <div class="col-sm-1">
+          <button type="submit" class="btn btn-sm btn-primary w-100">Create</button>
+        </div>
+      </div>
+    </form>
+
+    <table class="table table-sm table-hover mb-0 small">
+      <thead class="table-light">
+        <tr>
+          <th>Code</th>
+          <th>Description</th>
+          <th>Amount</th>
+          <th>Redeem by</th>
+          <th>Valid days</th>
+          <th>Redeemed by</th>
+          <th>Redeemed at</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in data.all_gift_codes %}
+        <tr class="{% if c.redeemed_by %}text-muted{% elif c.is_expired %}text-danger{% endif %}">
+          <td class="font-monospace">{{ c.code }}</td>
+          <td>{{ c.description }}</td>
+          <td>${{ c.amount|floatformat:2 }}</td>
+          <td>{{ c.expires_at|date:"Y-m-d" }}</td>
+          <td>{{ c.validity_days|default:"&#8734;" }}</td>
+          <td>{{ c.redeemed_by.email|default:"&mdash;" }}</td>
+          <td>{{ c.redeemed_at|date:"Y-m-d H:i"|default:"&mdash;" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-muted">No gift codes yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+  </div>
+</div>
+
+{% elif data.section == 'analytics' %}
+<div class="card shadow-sm">
+  <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+    <span>Spending analytics</span>
+    <span class="small fw-normal">
+      {% for slug, label, desc in data.tx_filters %}
+        {% if slug == data.tx_filter %}
+          <span class="badge bg-primary">{{ label }}</span>
+        {% else %}
+          <a href="?type={{ slug }}" class="badge bg-light text-dark text-decoration-none border">{{ label }}</a>
+        {% endif %}
+      {% endfor %}
+    </span>
+  </div>
+  <div class="card-body px-3 py-3">
+    {% if data.stats.count %}
+    <div class="row g-3">
+      <div class="col-sm-4 col-md-3">
+        <div class="small text-muted fw-semibold text-uppercase">Transactions</div>
+        <div class="fs-4">{{ data.stats.count }}</div>
+      </div>
+      <div class="col-sm-4 col-md-3">
+        <div class="small text-muted fw-semibold text-uppercase">Total</div>
+        <div class="fs-4">${{ data.stats.total|floatformat:4 }}</div>
+      </div>
+      <div class="col-sm-4 col-md-3">
+        <div class="small text-muted fw-semibold text-uppercase">Average</div>
+        <div class="fs-4">${{ data.stats.mean|floatformat:4 }}</div>
+      </div>
+      <div class="col-sm-4 col-md-3">
+        <div class="small text-muted fw-semibold text-uppercase">Std dev</div>
+        <div class="fs-4">${{ data.stats.stddev|floatformat:4 }}</div>
+      </div>
+      <div class="col-sm-4 col-md-3">
+        <div class="small text-muted fw-semibold text-uppercase">Min</div>
+        <div class="fs-4">${{ data.stats.min|floatformat:4 }}</div>
+      </div>
+      <div class="col-sm-4 col-md-3">
+        <div class="small text-muted fw-semibold text-uppercase">Max</div>
+        <div class="fs-4">${{ data.stats.max|floatformat:4 }}</div>
+      </div>
+      <div class="col-sm-4 col-md-3">
+        <div class="small text-muted fw-semibold text-uppercase">Variance</div>
+        <div class="fs-4">{{ data.stats.variance|floatformat:8 }}</div>
+      </div>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0">No transactions match this filter.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% elif data.section == 'users' %}
+<div class="card shadow-sm">
+  <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+    <span>Users</span>
+    <span class="small text-muted fw-normal">{{ data.page_obj.paginator.count }} total</span>
+  </div>
+  <div class="card-body px-3 py-3">
+    <table class="table table-sm table-hover mb-3 small">
+      <thead class="table-light">
+        <tr>
+          <th>Email</th>
+          <th>Username</th>
+          <th>Joined</th>
+          <th>Last login</th>
+          <th class="text-center">Staff</th>
+          <th class="text-center">Demo</th>
+          <th class="text-center">Active</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in data.page_obj %}
+        <tr class="{% if not u.is_active %}text-muted{% endif %}">
+          <td>{{ u.email|default:"&mdash;" }}</td>
+          <td class="font-monospace">{{ u.username }}</td>
+          <td>{{ u.date_joined|date:"Y-m-d H:i" }}</td>
+          <td>{{ u.last_login|date:"Y-m-d H:i"|default:"&mdash;" }}</td>
+          <td class="text-center">{% if u.is_staff %}&#10003;{% endif %}</td>
+          <td class="text-center">{% if u.is_demo %}&#10003;{% endif %}</td>
+          <td class="text-center">{% if u.is_active %}&#10003;{% endif %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-muted">No users.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if data.page_obj.paginator.num_pages > 1 %}
+    <nav class="d-flex justify-content-between align-items-center small">
+      <div class="text-muted">
+        Page {{ data.page_obj.number }} of {{ data.page_obj.paginator.num_pages }}
+      </div>
+      <ul class="pagination pagination-sm mb-0">
+        {% if data.page_obj.has_previous %}
+          <li class="page-item"><a class="page-link" href="?page={{ data.page_obj.previous_page_number }}">&laquo; Prev</a></li>
+        {% else %}
+          <li class="page-item disabled"><span class="page-link">&laquo; Prev</span></li>
+        {% endif %}
+        {% if data.page_obj.has_next %}
+          <li class="page-item"><a class="page-link" href="?page={{ data.page_obj.next_page_number }}">Next &raquo;</a></li>
+        {% else %}
+          <li class="page-item disabled"><span class="page-link">Next &raquo;</span></li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+</div>
+</div>
+{% endblock %}

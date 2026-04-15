@@ -325,13 +325,107 @@ def account(request):
     data['all_topups'] = all_topups
     data['usage_log']  = UsageLog.objects.filter(user=request.user)[:20]
 
-    if request.user.is_staff:
-        all_codes = GiftCode.objects.all().order_by('-id')
-        for c in all_codes:
-            c.is_expired = c.expires_at < _now and c.redeemed_by_id is None
-        data['all_gift_codes'] = all_codes
-
     return render(request, 'account.html', {'data': data})
+
+
+#=========================
+#  Backend (staff only)
+#=========================
+
+BACKEND_SECTIONS = [
+    ('home',       'Home',       '/backend/'),
+    ('users',      'Users',      '/backend/users/'),
+    ('gift-codes', 'Gift Codes', '/backend/gift-codes/'),
+    ('analytics',  'Analytics',  '/backend/analytics/'),
+]
+
+ANALYTICS_FILTERS = [
+    ('all',         'All',          None),
+    ('cv-scoring',  'CV scoring',   'CV scoring'),
+    ('job-import',  'Job import',   'Job import'),
+]
+
+BACKEND_USERS_PER_PAGE = 50
+
+
+def _backend_base(request, section):
+    return {'user': request.user, 'section': section, 'sections': BACKEND_SECTIONS}
+
+
+@private_view
+def backend_home(request):
+    if not request.user.is_staff:
+        return HttpResponseRedirect('/')
+    return render(request, 'backend.html', {'data': _backend_base(request, 'home')})
+
+
+@private_view
+def backend_gift_codes(request):
+    if not request.user.is_staff:
+        return HttpResponseRedirect('/')
+    data = _backend_base(request, 'gift-codes')
+    _now = timezone.now()
+    all_codes = GiftCode.objects.all().order_by('-id')
+    for c in all_codes:
+        c.is_expired = c.expires_at < _now and c.redeemed_by_id is None
+    data['all_gift_codes'] = all_codes
+    return render(request, 'backend.html', {'data': data})
+
+
+@private_view
+def backend_analytics(request):
+    if not request.user.is_staff:
+        return HttpResponseRedirect('/')
+    data = _backend_base(request, 'analytics')
+
+    tx_filter = request.GET.get('type', 'all')
+    label_map = {slug: (label, desc) for slug, label, desc in ANALYTICS_FILTERS}
+    if tx_filter not in label_map:
+        tx_filter = 'all'
+    _, description_filter = label_map[tx_filter]
+
+    qs = UsageLog.objects.all()
+    if description_filter is not None:
+        qs = qs.filter(description=description_filter)
+
+    amounts = [float(a) for a in qs.values_list('amount', flat=True)]
+    n = len(amounts)
+    if n:
+        total = sum(amounts)
+        mean  = total / n
+        vmin  = min(amounts)
+        vmax  = max(amounts)
+        variance = sum((x - mean) ** 2 for x in amounts) / n
+        stddev   = variance ** 0.5
+    else:
+        total = mean = vmin = vmax = variance = stddev = 0.0
+
+    data['tx_filter']   = tx_filter
+    data['tx_filters']  = ANALYTICS_FILTERS
+    data['stats'] = {
+        'count':    n,
+        'total':    total,
+        'mean':     mean,
+        'min':      vmin,
+        'max':      vmax,
+        'variance': variance,
+        'stddev':   stddev,
+    }
+    return render(request, 'backend.html', {'data': data})
+
+
+@private_view
+def backend_users(request):
+    if not request.user.is_staff:
+        return HttpResponseRedirect('/')
+    from django.core.paginator import Paginator
+    data = _backend_base(request, 'users')
+    qs = User.objects.all().order_by('-date_joined')
+    paginator = Paginator(qs, BACKEND_USERS_PER_PAGE)
+    page_number = request.GET.get('page') or 1
+    page_obj = paginator.get_page(page_number)
+    data['page_obj'] = page_obj
+    return render(request, 'backend.html', {'data': data})
 
 
 #=========================
@@ -396,9 +490,9 @@ def redeem_gift_code(request):
 @private_view
 def create_gift_code(request):
     if not request.user.is_staff:
-        return HttpResponseRedirect('/account/')
+        return HttpResponseRedirect('/')
     if request.method != 'POST':
-        return HttpResponseRedirect('/account/')
+        return HttpResponseRedirect('/backend/gift-codes/')
 
     import random, string
     code        = request.POST.get('code', '').strip().upper()
@@ -416,7 +510,7 @@ def create_gift_code(request):
 
     if not amount or not expires_at:
         messages.warning(request, 'Code, amount and expiry date are required.')
-        return HttpResponseRedirect('/account/#admin')
+        return HttpResponseRedirect('/backend/gift-codes/')
 
     try:
         amount = Decimal(amount)
@@ -424,7 +518,7 @@ def create_gift_code(request):
             raise ValueError
     except Exception:
         messages.warning(request, 'Invalid amount.')
-        return HttpResponseRedirect('/account/#admin')
+        return HttpResponseRedirect('/backend/gift-codes/')
 
     try:
         from django.utils.dateparse import parse_datetime, parse_date
@@ -437,17 +531,17 @@ def create_gift_code(request):
             raise ValueError
     except Exception:
         messages.warning(request, 'Invalid expiry date.')
-        return HttpResponseRedirect('/account/#admin')
+        return HttpResponseRedirect('/backend/gift-codes/')
 
     try:
         vd = int(validity_days) if validity_days else None
     except ValueError:
         messages.warning(request, 'Invalid validity days.')
-        return HttpResponseRedirect('/account/#admin')
+        return HttpResponseRedirect('/backend/gift-codes/')
 
     if GiftCode.objects.filter(code=code).exists():
         messages.warning(request, f'Code "{code}" already exists.')
-        return HttpResponseRedirect('/account/#admin')
+        return HttpResponseRedirect('/backend/gift-codes/')
 
     GiftCode.objects.create(
         code=code,
@@ -457,7 +551,7 @@ def create_gift_code(request):
         validity_days=vd,
     )
     messages.success(request, f'Gift code "{code}" created (${amount:.2f}).')
-    return HttpResponseRedirect('/account/#admin')
+    return HttpResponseRedirect('/backend/gift-codes/')
 
 
 #=========================
