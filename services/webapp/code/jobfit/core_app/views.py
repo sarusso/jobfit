@@ -356,7 +356,48 @@ def _backend_base(request, section):
 def backend_home(request):
     if not request.user.is_staff:
         return HttpResponseRedirect('/')
-    return render(request, 'backend.html', {'data': _backend_base(request, 'home')})
+    data = _backend_base(request, 'home')
+
+    import datetime as _dt
+    days = 30
+    today = timezone.localdate()
+    start_date = today - timedelta(days=days - 1)
+    naive_start = _dt.datetime.combine(start_date, _dt.time.min)
+    start_dt = timezone.make_aware(naive_start) if timezone.is_naive(naive_start) else naive_start
+
+    tx_counts    = {start_date + timedelta(days=i): 0 for i in range(days)}
+    signup_counts = {start_date + timedelta(days=i): 0 for i in range(days)}
+
+    for dt in UsageLog.objects.filter(created_at__gte=start_dt).values_list('created_at', flat=True):
+        d = timezone.localtime(dt).date()
+        if d in tx_counts:
+            tx_counts[d] += 1
+
+    for dt in User.objects.filter(date_joined__gte=start_dt).values_list('date_joined', flat=True):
+        d = timezone.localtime(dt).date()
+        if d in signup_counts:
+            signup_counts[d] += 1
+
+    def _series(counts):
+        items = sorted(counts.items())
+        vmax  = max((v for _, v in items), default=0)
+        series = [
+            {'date': d, 'count': v, 'pct': (v / vmax * 100) if vmax else 0}
+            for d, v in items
+        ]
+        return series, vmax
+
+    data['total_users']     = User.objects.count()
+    data['total_tx']        = UsageLog.objects.count()
+    data['tx_last_days']    = sum(tx_counts.values())
+    data['signups_last_days'] = sum(signup_counts.values())
+    data['window_days']     = days
+    data['tx_series'],     data['tx_max']     = _series(tx_counts)
+    data['signup_series'], data['signup_max'] = _series(signup_counts)
+    data['window_start']    = start_date
+    data['window_end']      = today
+
+    return render(request, 'backend.html', {'data': data})
 
 
 @private_view

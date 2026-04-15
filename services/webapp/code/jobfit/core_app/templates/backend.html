@@ -20,9 +20,102 @@
 <div class="col-lg-10">
 
 {% if data.section == 'home' %}
-  <div class="text-center text-muted py-5">
-    <p class="mb-0">Choose a page from the bar above.</p>
+<div class="row g-3 mb-4">
+  <div class="col-sm-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="small text-muted fw-semibold text-uppercase">Users</div>
+        <div class="fs-3 fw-bold">{{ data.total_users }}</div>
+        <div class="small text-muted">{{ data.signups_last_days }} signed up in the last {{ data.window_days }} days</div>
+      </div>
+    </div>
   </div>
+  <div class="col-sm-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="small text-muted fw-semibold text-uppercase">Transactions</div>
+        <div class="fs-3 fw-bold">{{ data.total_tx }}</div>
+        <div class="small text-muted">{{ data.tx_last_days }} in the last {{ data.window_days }} days</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="small text-muted fw-semibold text-uppercase">Window</div>
+        <div class="fs-3 fw-bold">{{ data.window_days }}d</div>
+        <div class="small text-muted">rolling histograms below</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mb-3">
+  <div class="card-header fw-bold">Transactions per day</div>
+  <div class="card-body">
+    <div class="d-flex" style="height:8rem;">
+      <div class="d-flex flex-column justify-content-between small text-muted pe-2 text-end" style="min-width:2rem;">
+        <span>{{ data.tx_max }}</span>
+        <span>0</span>
+      </div>
+      <div class="flex-grow-1 border-start border-bottom position-relative">
+        <div class="d-flex align-items-end gap-1 h-100 px-1">
+          {% for b in data.tx_series %}
+          <div class="flex-fill position-relative chart-bar"
+               title="{{ b.date|date:'Y-m-d' }}: {{ b.count }} tx"
+               data-bs-toggle="tooltip"
+               style="background:#0d6efd;height:{{ b.pct|floatformat:1 }}%;min-height:1px;border-radius:2px 2px 0 0;cursor:pointer;">
+            {% if b.count %}
+            <span class="position-absolute start-50 translate-middle-x" style="top:-1.1rem;font-size:.65rem;color:#0d47a1;">{{ b.count }}</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="d-flex justify-content-between small text-muted mt-1" style="padding-left:2rem;">
+      <span>{{ data.window_start|date:"M j" }}</span>
+      <span>{{ data.window_end|date:"M j" }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header fw-bold">Signups per day</div>
+  <div class="card-body">
+    <div class="d-flex" style="height:8rem;">
+      <div class="d-flex flex-column justify-content-between small text-muted pe-2 text-end" style="min-width:2rem;">
+        <span>{{ data.signup_max }}</span>
+        <span>0</span>
+      </div>
+      <div class="flex-grow-1 border-start border-bottom position-relative">
+        <div class="d-flex align-items-end gap-1 h-100 px-1">
+          {% for b in data.signup_series %}
+          <div class="flex-fill position-relative chart-bar"
+               title="{{ b.date|date:'Y-m-d' }}: {{ b.count }} signups"
+               data-bs-toggle="tooltip"
+               style="background:#198754;height:{{ b.pct|floatformat:1 }}%;min-height:1px;border-radius:2px 2px 0 0;cursor:pointer;">
+            {% if b.count %}
+            <span class="position-absolute start-50 translate-middle-x" style="top:-1.1rem;font-size:.65rem;color:#0f5132;">{{ b.count }}</span>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="d-flex justify-content-between small text-muted mt-1" style="padding-left:2rem;">
+      <span>{{ data.window_start|date:"M j" }}</span>
+      <span>{{ data.window_end|date:"M j" }}</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var els = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+  els.forEach(function(el){ new bootstrap.Tooltip(el); });
+})();
+</script>
 
 {% elif data.section == 'gift-codes' %}
 <div class="card shadow-sm">
