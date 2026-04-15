@@ -16,30 +16,31 @@ class ProfileBalanceTest(BaseTestCase):
         self.assertEqual(self.user.profile.get_balance(), Decimal('0'))
 
     def test_balance_with_topup(self):
-        TopUp.objects.create(user=self.user, amount=Decimal('5.00'), residual=Decimal('5.00'))
+        TopUp.objects.create(user=self.user, credits=Decimal('5.00'), residual_credits=Decimal('5.00'))
         self.assertEqual(self.user.profile.get_balance(), Decimal('5.00'))
 
     def test_balance_partial_residual(self):
-        TopUp.objects.create(user=self.user, amount=Decimal('5.00'), residual=Decimal('3.00'))
+        TopUp.objects.create(user=self.user, credits=Decimal('5.00'), residual_credits=Decimal('3.00'))
         self.assertEqual(self.user.profile.get_balance(), Decimal('3.00'))
 
     def test_balance_multiple_topups(self):
-        TopUp.objects.create(user=self.user, amount=Decimal('5.00'), residual=Decimal('5.00'))
-        TopUp.objects.create(user=self.user, amount=Decimal('2.00'), residual=Decimal('2.00'))
+        TopUp.objects.create(user=self.user, credits=Decimal('5.00'), residual_credits=Decimal('5.00'))
+        TopUp.objects.create(user=self.user, credits=Decimal('2.00'), residual_credits=Decimal('2.00'))
         self.assertEqual(self.user.profile.get_balance(), Decimal('7.00'))
 
     def test_expired_topup_excluded(self):
         past = timezone.now() - timezone.timedelta(days=1)
-        TopUp.objects.create(user=self.user, amount=Decimal('5.00'), residual=Decimal('5.00'), expires_at=past)
+        TopUp.objects.create(user=self.user, credits=Decimal('5.00'), residual_credits=Decimal('5.00'), expires_at=past)
+
         self.assertEqual(self.user.profile.get_balance(), Decimal('0'))
 
     def test_zero_residual_excluded(self):
-        TopUp.objects.create(user=self.user, amount=Decimal('5.00'), residual=Decimal('0'))
+        TopUp.objects.create(user=self.user, credits=Decimal('5.00'), residual_credits=Decimal('0'))
         self.assertEqual(self.user.profile.get_balance(), Decimal('0'))
 
     def test_future_expiry_included(self):
         future = timezone.now() + timezone.timedelta(days=2)
-        TopUp.objects.create(user=self.user, amount=Decimal('5.00'), residual=Decimal('5.00'), expires_at=future)
+        TopUp.objects.create(user=self.user, credits=Decimal('5.00'), residual_credits=Decimal('5.00'), expires_at=future)
         self.assertEqual(self.user.profile.get_balance(), Decimal('5.00'))
 
 
@@ -47,7 +48,7 @@ class GiftCodeTest(BaseTestCase):
 
     def test_gift_code_creation(self):
         future = timezone.now() + timezone.timedelta(days=30)
-        code = GiftCode.objects.create(code='TEST-CODE', amount=Decimal('10.00'), expires_at=future)
+        code = GiftCode.objects.create(code='TEST-CODE', credits=Decimal('10.00'), expires_at=future)
         self.assertIsNone(code.redeemed_by)
         self.assertIsNone(code.redeemed_at)
         self.assertIsNone(code.validity_days)

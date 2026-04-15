@@ -134,8 +134,8 @@
           <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. julia, second for matt">
         </div>
         <div class="col-sm-2">
-          <label class="form-label small fw-semibold mb-1">Amount ($)</label>
-          <input type="number" name="amount" class="form-control form-control-sm" placeholder="5.00" step="0.01" min="0.01" required>
+          <label class="form-label small fw-semibold mb-1">Credits</label>
+          <input type="number" name="credits" class="form-control form-control-sm" placeholder="50.00" step="0.01" min="0.01" required>
         </div>
         <div class="col-sm-2">
           <label class="form-label small fw-semibold mb-1">Redeem by</label>
@@ -156,7 +156,7 @@
         <tr>
           <th>Code</th>
           <th>Description</th>
-          <th>Amount</th>
+          <th>Credits</th>
           <th>Redeem by</th>
           <th>Valid days</th>
           <th>Redeemed by</th>
@@ -168,7 +168,7 @@
         <tr class="{% if c.redeemed_by %}text-muted{% elif c.is_expired %}text-danger{% endif %}">
           <td class="font-monospace">{{ c.code }}</td>
           <td>{{ c.description }}</td>
-          <td>${{ c.amount|floatformat:2 }}</td>
+          <td>{{ c.credits|floatformat:2 }}</td>
           <td>{{ c.expires_at|date:"Y-m-d" }}</td>
           <td>{{ c.validity_days|default:"&#8734;" }}</td>
           <td>{{ c.redeemed_by.email|default:"&mdash;" }}</td>

@@ -49,13 +49,17 @@ def _get_balance(user) -> Decimal:
 
 
 def _track_usage(user, provider: str, model: str, usage, description: str = ""):
-    """Record LLM token usage and deduct cost from TopUps (FIFO, soonest-expiring first).
+    """Record LLM token usage: log the real USD cost (internal) and deduct the
+    fixed credit price (user-facing) from the user's TopUps (FIFO, soonest-expiring first).
 
     usage: object with .prompt_tokens / .completion_tokens, or a plain dict.
     """
+    from decimal import ROUND_HALF_UP
     from django.db import transaction
     from django.db.models import Q
     from django.utils import timezone
+
+    from . import pricing as pricing_cfg
 
     if isinstance(usage, dict):
         prompt_tokens     = usage.get("prompt_tokens", 0)
@@ -70,15 +74,19 @@ def _track_usage(user, provider: str, model: str, usage, description: str = ""):
     key = pricing.pricing_key() if pricing else "0-0"
 
     if pricing:
-        cost = (
+        usd_cost = (
             Decimal(str(prompt_tokens))     * Decimal(str(pricing.price.get("prompt_tokens", 0))) +
             Decimal(str(completion_tokens)) * Decimal(str(pricing.price.get("completion_tokens", 0)))
         ) / Decimal('1000000')
     else:
-        cost = Decimal('0')
+        usd_cost = Decimal('0')
+
+    credits_charged = pricing_cfg.credits_for_action(description).quantize(
+        Decimal('0.01'), rounding=ROUND_HALF_UP
+    )
 
     with transaction.atomic():
-        # Update raw usage JSON on profile
+        # Update raw token-usage JSON on profile
         profile, _ = Profile.objects.select_for_update().get_or_create(user=user)
         u = profile.usage or {}
         u.setdefault(provider, {}).setdefault(model, {}).setdefault(
@@ -89,13 +97,12 @@ def _track_usage(user, provider: str, model: str, usage, description: str = ""):
         profile.usage = u
         profile.save(update_fields=["usage"])
 
-        if cost > Decimal('0'):
+        if credits_charged > Decimal('0'):
             now = timezone.now()
-            # Load usable TopUps locked for update, soonest-expiring first
             topups = list(
                 TopUp.objects.select_for_update().filter(
                     user=user,
-                    residual__gt=0,
+                    residual_credits__gt=0,
                 ).filter(
                     Q(expires_at__isnull=True) | Q(expires_at__gt=now)
                 ).order_by(
@@ -103,32 +110,32 @@ def _track_usage(user, provider: str, model: str, usage, description: str = ""):
                 )
             )
 
-            remaining = cost
+            remaining = credits_charged
             last_topup = None
             for topup in topups:
                 last_topup = topup
-                if topup.residual >= remaining:
-                    topup.residual -= remaining
+                if topup.residual_credits >= remaining:
+                    topup.residual_credits -= remaining
                     remaining = Decimal('0')
-                    topup.save(update_fields=['residual'])
+                    topup.save(update_fields=['residual_credits'])
                     break
                 else:
-                    remaining -= topup.residual
-                    topup.residual = Decimal('0')
-                    topup.save(update_fields=['residual'])
+                    remaining -= topup.residual_credits
+                    topup.residual_credits = Decimal('0')
+                    topup.save(update_fields=['residual_credits'])
 
-            # If cost exceeded all usable topups, let the last one go negative
             if remaining > 0 and last_topup is not None:
-                last_topup.residual -= remaining
-                last_topup.save(update_fields=['residual'])
+                last_topup.residual_credits -= remaining
+                last_topup.save(update_fields=['residual_credits'])
 
-            total_tokens = prompt_tokens + completion_tokens
-            UsageLog.objects.create(
-                user=user,
-                amount=cost,
-                description=description,
-                detail=f"{provider} {model} — {total_tokens:,} tokens",
-            )
+        total_tokens = prompt_tokens + completion_tokens
+        UsageLog.objects.create(
+            user=user,
+            credits_charged=credits_charged,
+            usd_cost=usd_cost,
+            description=description,
+            detail=f"{provider} {model} — {total_tokens:,} tokens",
+        )
 
 
 # ------------------------------------------------------------------ #

@@ -313,8 +313,11 @@ def account(request):
 
         data['edit'] = None
 
-    data['total_cost'] = _compute_usage_cost(profile.usage or {})
-    data['balance']    = profile.get_balance()
+    total_credits = UsageLog.objects.filter(user=request.user).aggregate(
+        s=Sum('credits_charged')
+    )['s'] or Decimal('0.00')
+    data['total_credits'] = total_credits
+    data['balance']       = profile.get_balance()
     data['topups']     = TopUp.objects.filter(user=request.user).filter(
         Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
     ).order_by(F('expires_at').asc(nulls_last=True))
@@ -429,7 +432,7 @@ def backend_analytics(request):
     if description_filter is not None:
         qs = qs.filter(description=description_filter)
 
-    amounts = [float(a) for a in qs.values_list('amount', flat=True)]
+    amounts = [float(a) for a in qs.values_list('usd_cost', flat=True) if a is not None]
     n = len(amounts)
     if n:
         total = sum(amounts)
@@ -511,8 +514,8 @@ def redeem_gift_code(request):
             )
             TopUp.objects.create(
                 user=request.user,
-                amount=gift.amount,
-                residual=gift.amount,
+                credits=gift.credits,
+                residual_credits=gift.credits,
                 expires_at=expires_at,
             )
     except Exception as e:
@@ -520,7 +523,7 @@ def redeem_gift_code(request):
         messages.warning(request, 'An error occurred. Please try again.')
         return HttpResponseRedirect('/account/')
 
-    messages.success(request, f'${gift.amount:.2f} added to your account.')
+    messages.success(request, f'{gift.credits:.2f} credits added to your account.')
     return HttpResponseRedirect('/account/')
 
 
@@ -538,7 +541,7 @@ def create_gift_code(request):
     import random, string
     code        = request.POST.get('code', '').strip().upper()
     description = request.POST.get('description', '').strip()
-    amount      = request.POST.get('amount', '').strip()
+    credits_str = request.POST.get('credits', '').strip()
     expires_at  = request.POST.get('expires_at', '').strip()
     validity_days = request.POST.get('validity_days', '').strip()
 
@@ -549,16 +552,16 @@ def create_gift_code(request):
             if not GiftCode.objects.filter(code=code).exists():
                 break
 
-    if not amount or not expires_at:
-        messages.warning(request, 'Code, amount and expiry date are required.')
+    if not credits_str or not expires_at:
+        messages.warning(request, 'Code, credits and expiry date are required.')
         return HttpResponseRedirect('/backend/gift-codes/')
 
     try:
-        amount = Decimal(amount)
-        if amount <= 0:
+        credits_val = Decimal(credits_str).quantize(Decimal('0.01'))
+        if credits_val <= 0:
             raise ValueError
     except Exception:
-        messages.warning(request, 'Invalid amount.')
+        messages.warning(request, 'Invalid credits amount.')
         return HttpResponseRedirect('/backend/gift-codes/')
 
     try:
@@ -587,11 +590,11 @@ def create_gift_code(request):
     GiftCode.objects.create(
         code=code,
         description=description,
-        amount=amount,
+        credits=credits_val,
         expires_at=dt,
         validity_days=vd,
     )
-    messages.success(request, f'Gift code "{code}" created (${amount:.2f}).')
+    messages.success(request, f'Gift code "{code}" created ({credits_val:.2f} credits).')
     return HttpResponseRedirect('/backend/gift-codes/')
 
 

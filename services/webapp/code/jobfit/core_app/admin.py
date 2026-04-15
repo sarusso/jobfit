@@ -76,7 +76,7 @@ class LLMPricingAdmin(admin.ModelAdmin):
 
 @admin.register(GiftCode)
 class GiftCodeAdmin(admin.ModelAdmin):
-    list_display  = ('code', 'amount', 'validity_days', 'expires_at', 'redeemed_by', 'redeemed_at')
+    list_display  = ('code', 'credits', 'validity_days', 'expires_at', 'redeemed_by', 'redeemed_at')
     list_filter   = ('expires_at',)
     search_fields = ('code', 'redeemed_by__email')
     readonly_fields = ('redeemed_by', 'redeemed_at')
@@ -84,7 +84,7 @@ class GiftCodeAdmin(admin.ModelAdmin):
 
 @admin.register(TopUp)
 class TopUpAdmin(admin.ModelAdmin):
-    list_display  = ('user', 'amount', 'residual', 'created_at', 'expires_at')
+    list_display  = ('user', 'credits', 'residual_credits', 'created_at', 'expires_at')
     list_filter   = ('expires_at',)
     search_fields = ('user__email',)
     readonly_fields = ('created_at',)
@@ -92,10 +92,10 @@ class TopUpAdmin(admin.ModelAdmin):
 
 @admin.register(UsageLog)
 class UsageLogAdmin(admin.ModelAdmin):
-    list_display  = ('user', 'amount', 'description', 'created_at')
+    list_display  = ('user', 'credits_charged', 'usd_cost', 'description', 'created_at')
     list_filter   = ('created_at',)
     search_fields = ('user__email', 'description')
-    readonly_fields = ('user', 'amount', 'description', 'created_at')
+    readonly_fields = ('user', 'credits_charged', 'usd_cost', 'description', 'created_at')
 
     def has_add_permission(self, request):
         return False

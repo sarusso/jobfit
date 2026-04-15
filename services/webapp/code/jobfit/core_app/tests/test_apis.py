@@ -43,10 +43,10 @@ class GiftCodeRedemptionTest(BaseTestCase):
         Profile.objects.create(user=self.user)
         self.login(self.user)
 
-    def _make_code(self, code='GIFT-CODE', amount='5.00', days_valid=30, validity_days=None):
+    def _make_code(self, code='GIFT-CODE', credits='5.00', days_valid=30, validity_days=None):
         return GiftCode.objects.create(
             code=code,
-            amount=Decimal(amount),
+            credits=Decimal(credits),
             expires_at=timezone.now() + timezone.timedelta(days=days_valid),
             validity_days=validity_days,
         )
@@ -56,7 +56,7 @@ class GiftCodeRedemptionTest(BaseTestCase):
         resp = self.client.post('/account/redeem/', {'code': 'GIFT-CODE'})
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(TopUp.objects.filter(user=self.user).count(), 1)
-        self.assertEqual(TopUp.objects.get(user=self.user).residual, Decimal('5.00'))
+        self.assertEqual(TopUp.objects.get(user=self.user).residual_credits, Decimal('5.00'))
 
     def test_redeem_case_insensitive(self):
         self._make_code()
@@ -71,7 +71,7 @@ class GiftCodeRedemptionTest(BaseTestCase):
     def test_redeem_expired_code(self):
         GiftCode.objects.create(
             code='OLD-CODE',
-            amount=Decimal('5.00'),
+            credits=Decimal('5.00'),
             expires_at=timezone.now() - timezone.timedelta(days=1),
         )
         self.client.post('/account/redeem/', {'code': 'OLD-CODE'})

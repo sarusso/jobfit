@@ -163,7 +163,7 @@
 
           <div class="account-row">
             <div class="account-label">Current balance</div>
-            <div class="account-value fw-semibold">${{ data.balance|floatformat:2 }}</div>
+            <div class="account-value fw-semibold">{{ data.balance|floatformat:2 }} credits</div>
           </div>
 
 
@@ -198,8 +198,8 @@
             {% for t in data.all_topups %}
             <tr class="{% if t.is_expired %}text-muted{% endif %}">
               <td class="ps-0" style="width:9rem;white-space:nowrap">{{ t.created_at|date:"Y-m-d H:i" }}</td>
-              <td class="{% if not t.is_expired %}text-success fw-semibold{% endif %}" style="white-space:nowrap">${{ t.amount|floatformat:2 }}</td>
-              <td class="text-muted">(residual: ${{ t.residual|floatformat:2 }})</td>
+              <td class="{% if not t.is_expired %}text-success fw-semibold{% endif %}" style="white-space:nowrap">{{ t.credits|floatformat:2 }} cr</td>
+              <td class="text-muted">(residual: {{ t.residual_credits|floatformat:2 }} cr)</td>
               <td class="text-muted">
                 {% if t.is_expired %}expired on {{ t.expires_at|date:"Y-m-d H:i" }}
                 {% elif t.expires_at %}expires {{ t.expires_at|date:"Y-m-d H:i" }}
@@ -222,7 +222,7 @@
 
         <div class="account-row">
           <div class="account-label">Total</div>
-          <div class="account-value">${{ data.total_cost|floatformat:4 }}</div>
+          <div class="account-value">{{ data.total_credits|floatformat:2 }} credits</div>
         </div>
 
         {% if data.usage_log %}
@@ -235,7 +235,7 @@
                 <tr>
                   <td class="text-muted ps-0" style="width:9rem">{{ entry.created_at|date:"Y-m-d H:i" }}</td>
                   <td>{{ entry.description }}</td>
-                  <td class="text-end pe-0 text-danger" style="white-space:nowrap">-${{ entry.amount|floatformat:4 }}</td>
+                  <td class="text-end pe-0 text-danger" style="white-space:nowrap">-{{ entry.credits_charged|floatformat:2 }} cr</td>
                 </tr>
                 {% endfor %}
               </tbody>
