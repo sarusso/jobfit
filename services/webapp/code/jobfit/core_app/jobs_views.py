@@ -138,7 +138,7 @@ def _track_usage(user, provider: str, model: str, usage, description: str = ""):
             credits_charged=credits_charged,
             usd_cost=usd_cost,
             type=type_map.get(description),
-            description=f"{description} ({model})",
+            description=description,
             detail=f"{provider} {model} — {total_tokens:,} tokens",
         )
 

@@ -101,11 +101,6 @@
       <button type="button" class="btn btn-sm btn-outline-light"
               data-bs-toggle="modal" data-bs-target="#addJobsModal">&#10010;<span class="d-none d-md-inline"> Jobs</span></button>
 
-      {# ── Backend link (staff only) ── #}
-      {% if request.user.is_staff %}
-      <a href="/backend/" class="btn btn-sm btn-outline-info" title="Backend">&#128736;&#65039;<span class="d-none d-md-inline"> Backend</span></a>
-      {% endif %}
-
       {# ── Hamburger ── #}
       <button class="btn btn-sm btn-outline-light" type="button"
               data-bs-toggle="offcanvas" data-bs-target="#sideMenu" aria-controls="sideMenu">
