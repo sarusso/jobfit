@@ -167,10 +167,18 @@ class TopUp(models.Model):
 
 
 class UsageLog(models.Model):
+    TYPE_JOB_IMPORT = 0
+    TYPE_CV_SCORING = 1
+    TYPE_CHOICES = (
+        (TYPE_JOB_IMPORT, 'Job import'),
+        (TYPE_CV_SCORING, 'CV scoring'),
+    )
+
     id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user            = models.ForeignKey('User', on_delete=models.CASCADE, related_name='usage_logs')
     credits_charged = models.DecimalField(max_digits=10, decimal_places=2)  # credits deducted
     usd_cost        = models.DecimalField(max_digits=10, decimal_places=6, null=True, blank=True)  # real LLM cost, internal
+    type            = models.IntegerField(choices=TYPE_CHOICES, null=True, blank=True, default=None)
     description     = models.CharField(max_length=100)                      # macro category, e.g. "CV scoring"
     detail          = models.CharField(max_length=255, blank=True)          # internal: provider/model/tokens
     created_at      = models.DateTimeField(auto_now_add=True)

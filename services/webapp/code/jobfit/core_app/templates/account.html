@@ -234,7 +234,7 @@
                 {% for entry in data.usage_log %}
                 <tr>
                   <td class="text-muted ps-0" style="width:9rem">{{ entry.created_at|date:"Y-m-d H:i" }}</td>
-                  <td>{{ entry.description }}</td>
+                  <td>{{ entry.get_type_display|default:"Unknown" }}</td>
                   <td class="text-end pe-0 text-danger" style="white-space:nowrap">-{{ entry.credits_charged|floatformat:2 }} cr</td>
                 </tr>
                 {% endfor %}

@@ -129,11 +129,16 @@ def _track_usage(user, provider: str, model: str, usage, description: str = ""):
                 last_topup.save(update_fields=['residual_credits'])
 
         total_tokens = prompt_tokens + completion_tokens
+        type_map = {
+            'Job import': UsageLog.TYPE_JOB_IMPORT,
+            'CV scoring': UsageLog.TYPE_CV_SCORING,
+        }
         UsageLog.objects.create(
             user=user,
             credits_charged=credits_charged,
             usd_cost=usd_cost,
-            description=description,
+            type=type_map.get(description),
+            description=f"{description} ({model})",
             detail=f"{provider} {model} — {total_tokens:,} tokens",
         )
 

@@ -92,13 +92,7 @@ class TopUpAdmin(admin.ModelAdmin):
 
 @admin.register(UsageLog)
 class UsageLogAdmin(admin.ModelAdmin):
-    list_display  = ('user', 'credits_charged', 'usd_cost', 'description', 'created_at')
-    list_filter   = ('created_at',)
+    list_display  = ('user', 'credits_charged', 'usd_cost', 'type', 'description', 'created_at')
+    list_filter   = ('type', 'created_at')
     search_fields = ('user__email', 'description')
-    readonly_fields = ('user', 'credits_charged', 'usd_cost', 'description', 'created_at')
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
+    readonly_fields = ('created_at',)
