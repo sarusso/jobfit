@@ -33,8 +33,9 @@ def jobs_context(request):
 
     existing_companies = list(
         Company.objects.filter(user=request.user, archived=False)
-        .values_list('slug', flat=True)
-        .order_by('slug')
+        .exclude(name='')
+        .values_list('name', flat=True)
+        .order_by('name')
     )
 
     return {
