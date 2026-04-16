@@ -774,7 +774,8 @@ def add_job_text(request):
         messages.warning(request, "Could not determine the company name. Please fill in the Company field.")
         return _modal_add_jobs_redirect(request)
 
-    job = _create_job(request.user, job_data, source_override="text")
+    source = url if url else "text"
+    job = _create_job(request.user, job_data, source_override=source)
     return HttpResponseRedirect(reverse("jobs_job", args=[job.company.slug, str(job.id)]))
 
 
