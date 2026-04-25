@@ -834,6 +834,7 @@ def scrape_categories(request):
         try:
             jobs = LeverScraper().setup(Path(settings.DATA_DIR)).fetch_jobs(base_url)
         except Exception as e:
+            log.exception("Lever scrape failed for %s", base_url)
             return JsonResponse({"error": str(e)}, status=500)
     else:
         if _get_balance(request.user) <= 0:
@@ -858,6 +859,7 @@ def scrape_categories(request):
             if fetch_usage:
                 _track_usage(request.user, provider.provider, provider.model_name("cheap"), fetch_usage, "Job import")
         except Exception as e:
+            log.exception("Generic scrape failed for %s", base_url)
             return JsonResponse({"error": str(e)}, status=500)
 
     # Mark jobs already in the DB

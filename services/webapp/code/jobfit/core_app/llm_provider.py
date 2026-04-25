@@ -11,9 +11,6 @@ from django.conf import settings
 log = logging.getLogger(__name__)
 
 
-_MAX_OUTPUT_TOKENS = 16384
-
-
 class LLMUsage:
     __slots__ = ("prompt_tokens", "completion_tokens", "output_truncated")
 
@@ -74,7 +71,6 @@ class OpenAIProvider(LLMProvider):
             temperature=0,
             seed=42,
             timeout=timeout,
-            max_tokens=_MAX_OUTPUT_TOKENS,
         )
         parsed = json.loads(response.choices[0].message.content)
         truncated = response.choices[0].finish_reason == "length"
@@ -86,6 +82,7 @@ class AnthropicProvider(LLMProvider):
     provider = "anthropic"
 
     MODELS = {"cheap": "claude-haiku-4-5-20251001", "expensive": "claude-sonnet-4-6-20250514"}
+    MAX_OUTPUT_TOKENS = 64_000  # required by API; set to model ceiling
 
     def __init__(self, api_key: str):
         import anthropic
@@ -107,7 +104,7 @@ class AnthropicProvider(LLMProvider):
         content.append({"type": "text", "text": prompt})
         response = self._client.messages.create(
             model=model,
-            max_tokens=_MAX_OUTPUT_TOKENS,
+            max_tokens=self.MAX_OUTPUT_TOKENS,
             messages=[{"role": "user", "content": content}],
             temperature=0,
             timeout=timeout,

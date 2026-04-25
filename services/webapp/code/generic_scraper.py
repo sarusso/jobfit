@@ -21,7 +21,10 @@ from playwright.sync_api import sync_playwright
 
 from base_scraper import BaseScraper
 
-_MAX_HTML_CHARS = 300_000
+_MAX_HTML_CHARS = 500_000
+
+
+_HYDRATION_WAIT_MS = 10_000
 
 
 def _rendered_html(url: str, timeout_ms: int = 30_000) -> str:
@@ -30,6 +33,8 @@ def _rendered_html(url: str, timeout_ms: int = 30_000) -> str:
         browser = p.chromium.launch()
         page = browser.new_page()
         page.goto(url, wait_until="load", timeout=timeout_ms)
+        # Give SPA frameworks time to hydrate / render collapsed sections into the DOM.
+        page.wait_for_timeout(_HYDRATION_WAIT_MS)
         html = page.content()
         browser.close()
 
