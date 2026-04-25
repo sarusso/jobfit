@@ -7,23 +7,24 @@
 
   {# ── Left sidebar ── #}
   <div class="col-lg-3 col-md-4">
-    <div class="sticky-top pt-1" style="top: 1rem; max-height: calc(100vh - 2rem); overflow-y: auto;">
-      <div class="card shadow-sm">
-        <div class="card-header py-2">
+    <div class="sticky-top pt-1" style="top: 1rem;">
+      <div class="card shadow-sm d-flex flex-column" style="max-height: calc(100vh - 8rem);">
+        <div class="card-header py-2 flex-shrink-0">
           <input id="company-filter" type="search" class="form-control form-control-sm mb-2"
                  placeholder="Filter companies…" autocomplete="off">
           <select id="status-filter" class="form-select form-select-sm">
-            <option value="all">All companies</option>
-            <option value="to_apply">Has to-apply jobs</option>
-            <option value="applied">Has applied jobs</option>
-            <option value="in_progress">Has in-progress jobs</option>
-            <option value="got_response">Has got-response jobs</option>
+            <option value="all">All</option>
+            <option value="none">Unsorted</option>
+            <option value="to_apply">To apply</option>
+            <option value="applied">Applied</option>
+            <option value="in_progress">In progress</option>
+            <option value="got_response">Got response</option>
           </select>
         </div>
-        <div class="list-group list-group-flush" id="company-list">
+        <div class="list-group list-group-flush flex-grow-1" id="company-list" style="overflow-y: auto; min-height: 0;">
           {% for company in active_companies %}
           <a href="{% url 'jobs_company' company.slug %}"
-             class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 company-link{% if company.status_counts.to_apply %} has-to_apply{% endif %}{% if company.status_counts.applied %} has-applied{% endif %}{% if company.status_counts.in_progress %} has-in_progress{% endif %}{% if company.status_counts.got_response %} has-got_response{% endif %}"
+             class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 company-link{% if company.status_counts.none %} has-none{% endif %}{% if company.status_counts.to_apply %} has-to_apply{% endif %}{% if company.status_counts.applied %} has-applied{% endif %}{% if company.status_counts.in_progress %} has-in_progress{% endif %}{% if company.status_counts.got_response %} has-got_response{% endif %}"
              data-name="{{ company.name|lower }}">
             <span class="company-label text-truncate me-2">
               {{ company.name }}
@@ -58,7 +59,7 @@
     </h2>
 
     {% for company in active_companies %}
-    <div class="card mb-3 shadow-sm job-card position-relative company-card{% if company.status_counts.to_apply %} has-to_apply{% endif %}{% if company.status_counts.applied %} has-applied{% endif %}{% if company.status_counts.in_progress %} has-in_progress{% endif %}{% if company.status_counts.got_response %} has-got_response{% endif %}"
+    <div class="card mb-3 shadow-sm job-card position-relative company-card{% if company.status_counts.none %} has-none{% endif %}{% if company.status_counts.to_apply %} has-to_apply{% endif %}{% if company.status_counts.applied %} has-applied{% endif %}{% if company.status_counts.in_progress %} has-in_progress{% endif %}{% if company.status_counts.got_response %} has-got_response{% endif %}"
          data-name="{{ company.name|lower }}">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-start">
