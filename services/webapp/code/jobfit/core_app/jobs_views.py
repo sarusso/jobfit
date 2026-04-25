@@ -867,7 +867,11 @@ def scrape_categories(request):
             job["exists"] = Job.objects.filter(
                 company__user=request.user, source=job_url
             ).exists()
-    return JsonResponse({"jobs": jobs, "base_url": base_url})
+
+    warnings = []
+    if board != "lever":
+        warnings = list(getattr(scraper, "_warnings", []))
+    return JsonResponse({"jobs": jobs, "base_url": base_url, "warnings": warnings})
 
 
 @private_view

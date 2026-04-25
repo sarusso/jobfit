@@ -21,11 +21,11 @@ from playwright.sync_api import sync_playwright
 
 from base_scraper import BaseScraper
 
-_MAX_HTML_CHARS = 80_000
+_MAX_HTML_CHARS = 300_000
 
 
 def _rendered_html(url: str, timeout_ms: int = 30_000) -> str:
-    """Fetch fully-rendered DOM via Playwright and return cleaned HTML."""
+    """Fetch fully-rendered DOM via Playwright and return cleaned HTML (untruncated)."""
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
@@ -48,7 +48,7 @@ def _rendered_html(url: str, timeout_ms: int = 30_000) -> str:
             keep["class"] = tag["class"]
         tag.attrs = keep
 
-    return str(soup)[:_MAX_HTML_CHARS]
+    return str(soup)
 
 
 class GenericScraper(BaseScraper):
@@ -142,11 +142,21 @@ class GenericScraper(BaseScraper):
         current_html = html_src  # pasted HTML only used for the first page
 
         self._fetch_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+        self._warnings: list[str] = []
 
         while current_url and current_url not in visited:
             visited.add(current_url)
-            page_html = current_html if current_html else _rendered_html(current_url, timeout_ms=timeout_ms)
+            raw_html = current_html if current_html else _rendered_html(current_url, timeout_ms=timeout_ms)
             current_html = None  # subsequent pages always fetched
+
+            if len(raw_html) > _MAX_HTML_CHARS:
+                self._warnings.append(
+                    f"Page HTML truncated to {_MAX_HTML_CHARS:,} chars "
+                    f"(original {len(raw_html):,}) at {current_url} — some jobs may be missing."
+                )
+                page_html = raw_html[:_MAX_HTML_CHARS]
+            else:
+                page_html = raw_html
 
             prompt = _make_prompt(current_url, page_html)
             timeout = getattr(self, "_openai_timeout", 300)
@@ -154,6 +164,11 @@ class GenericScraper(BaseScraper):
                 data, usage = self._llm_provider.complete_json(prompt, model_tier="cheap", timeout=timeout)
                 self._fetch_usage["prompt_tokens"]     += usage.prompt_tokens
                 self._fetch_usage["completion_tokens"] += usage.completion_tokens
+                if getattr(usage, "output_truncated", False):
+                    self._warnings.append(
+                        f"LLM response hit the output token cap at {current_url} — "
+                        f"the jobs list may be incomplete."
+                    )
             else:
                 response = self._llm_provider.chat.completions.create(
                     model="gpt-4o-mini",

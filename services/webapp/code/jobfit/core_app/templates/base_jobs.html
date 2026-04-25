@@ -453,6 +453,7 @@
                   <span id="fetchBtnLabel">Fetch Jobs</span>
                 </button>
                 <p id="fetchError" class="text-danger small mt-2 mb-0 d-none"></p>
+                <div id="fetchWarnings" class="alert alert-warning small mt-2 mb-0 py-2 px-3 d-none"></div>
               </div>
 
               <div id="scrapeStep2" class="d-none">
@@ -541,7 +542,10 @@
       const board   = document.getElementById('scrapeBoard').value;
       const spinner = document.getElementById('fetchSpinner');
       const errEl   = document.getElementById('fetchError');
+      const warnEl  = document.getElementById('fetchWarnings');
       errEl.classList.add('d-none');
+      warnEl.classList.add('d-none');
+      warnEl.innerHTML = '';
 
       let fetchPromise;
       if (board === 'pdf') {
@@ -590,6 +594,12 @@
         spinner.classList.add('d-none'); btn.disabled = false;
         document.getElementById('fetchBtnLabel').textContent = origLabel;
         if (data.error) { errEl.textContent = data.error; errEl.classList.remove('d-none'); return; }
+        if (Array.isArray(data.warnings) && data.warnings.length) {
+          warnEl.innerHTML = '<strong>Warning:</strong><ul class="mb-0 ps-3">' +
+            data.warnings.map(w => `<li>${w.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</li>`).join('') +
+            '</ul>';
+          warnEl.classList.remove('d-none');
+        }
         _baseUrl = data.base_url; _allJobs = data.jobs || [];
         renderJobs(_allJobs);
         document.getElementById('scrapeStep2').classList.remove('d-none');

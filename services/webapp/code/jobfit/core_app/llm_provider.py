@@ -11,12 +11,17 @@ from django.conf import settings
 log = logging.getLogger(__name__)
 
 
-class LLMUsage:
-    __slots__ = ("prompt_tokens", "completion_tokens")
+_MAX_OUTPUT_TOKENS = 16384
 
-    def __init__(self, prompt_tokens: int = 0, completion_tokens: int = 0):
+
+class LLMUsage:
+    __slots__ = ("prompt_tokens", "completion_tokens", "output_truncated")
+
+    def __init__(self, prompt_tokens: int = 0, completion_tokens: int = 0,
+                 output_truncated: bool = False):
         self.prompt_tokens = prompt_tokens
         self.completion_tokens = completion_tokens
+        self.output_truncated = output_truncated
 
 
 class LLMProvider(ABC):
@@ -69,9 +74,11 @@ class OpenAIProvider(LLMProvider):
             temperature=0,
             seed=42,
             timeout=timeout,
+            max_tokens=_MAX_OUTPUT_TOKENS,
         )
         parsed = json.loads(response.choices[0].message.content)
-        usage = LLMUsage(response.usage.prompt_tokens, response.usage.completion_tokens)
+        truncated = response.choices[0].finish_reason == "length"
+        usage = LLMUsage(response.usage.prompt_tokens, response.usage.completion_tokens, truncated)
         return parsed, usage
 
 
@@ -100,14 +107,15 @@ class AnthropicProvider(LLMProvider):
         content.append({"type": "text", "text": prompt})
         response = self._client.messages.create(
             model=model,
-            max_tokens=4096,
+            max_tokens=_MAX_OUTPUT_TOKENS,
             messages=[{"role": "user", "content": content}],
             temperature=0,
             timeout=timeout,
         )
         text = response.content[0].text
         parsed = json.loads(text)
-        usage = LLMUsage(response.usage.input_tokens, response.usage.output_tokens)
+        truncated = response.stop_reason == "max_tokens"
+        usage = LLMUsage(response.usage.input_tokens, response.usage.output_tokens, truncated)
         return parsed, usage
 
 
