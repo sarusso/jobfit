@@ -501,18 +501,25 @@ def index(request):
     for company in companies:
         jobs   = company.jobs.all()
         scored = []
+        status_counts = {Job.STATUS_TO_APPLY: 0, Job.STATUS_APPLIED: 0,
+                         Job.STATUS_IN_PROGRESS: 0, Job.STATUS_GOT_RESPONSE: 0}
         for job in jobs:
             if not job.archived and selected_cv:
                 s = job.scores.filter(cv=selected_cv, mode=mode).first()
                 if s:
                     scored.append(s.score)
+            if not job.archived and job.status in status_counts:
+                status_counts[job.status] += 1
         company.top_score = max(scored) if scored else None
+        company.status_counts = status_counts
+        company.has_pipeline = any(status_counts.values())
 
     active   = [c for c in companies if not c.archived]
     archived = [c for c in companies if c.archived]
     return render(request, "jobs/index.html", {
         "active_companies":   active,
         "archived_companies": archived,
+        "status_choices":     Job.STATUS_CHOICES,
     })
 
 
@@ -530,9 +537,10 @@ def company_view(request, company_slug):
     active   = [j for j in jobs if not j.archived]
     archived = [j for j in jobs if j.archived]
     return render(request, "jobs/company.html", {
-        "company":      company,
-        "active_jobs":  active,
+        "company":       company,
+        "active_jobs":   active,
         "archived_jobs": archived,
+        "status_choices": Job.STATUS_CHOICES,
     })
 
 
@@ -551,7 +559,10 @@ def job_view(request, company_slug, job_id):
         if selected_cv else False
     )
 
-    return render(request, "jobs/job.html", {"company": company, "job": job, "selected_cv": selected_cv})
+    return render(request, "jobs/job.html", {
+        "company": company, "job": job, "selected_cv": selected_cv,
+        "status_choices": Job.STATUS_CHOICES,
+    })
 
 
 @private_view
@@ -1149,6 +1160,34 @@ def toggle_known_fit(request, company_slug, job_id):
         existing.delete()
     else:
         KnownFit.objects.create(user=request.user, job=job, cv=selected_cv)
+
+    return HttpResponseRedirect(request.META.get(
+        "HTTP_REFERER", reverse("jobs_job", args=[company_slug, str(job.id)])
+    ))
+
+
+@private_view
+def save_job_tracking(request, company_slug, job_id):
+    from django.utils import timezone
+    company = get_object_or_404(Company, user=request.user, slug=company_slug)
+    job     = get_object_or_404(Job, company=company, id=job_id)
+
+    new_status = request.POST.get("status", Job.STATUS_NONE)
+    valid = {c[0] for c in Job.STATUS_CHOICES}
+    if new_status not in valid:
+        new_status = Job.STATUS_NONE
+
+    update_fields = ["notes"]
+    if new_status != job.status:
+        job.status = new_status
+        job.status_updated_at = timezone.now()
+        update_fields += ["status", "status_updated_at"]
+        if new_status == Job.STATUS_APPLIED and job.applied_at is None:
+            job.applied_at = timezone.now()
+            update_fields.append("applied_at")
+
+    job.notes = request.POST.get("notes", "")
+    job.save(update_fields=update_fields)
 
     return HttpResponseRedirect(request.META.get(
         "HTTP_REFERER", reverse("jobs_job", args=[company_slug, str(job.id)])

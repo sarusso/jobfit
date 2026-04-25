@@ -87,25 +87,42 @@ class Company(models.Model):
 
 
 class Job(models.Model):
-    id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    company          = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='jobs')
-    title            = models.CharField(max_length=500, blank=True)
-    location         = models.CharField(max_length=255, blank=True)
-    employment_type  = models.CharField(max_length=100, blank=True)
-    experience_level = models.CharField(max_length=100, blank=True)
-    summary          = models.TextField(blank=True)
-    description      = models.TextField(blank=True)
-    responsibilities = JSONField(default=list, blank=True)
-    requirements     = JSONField(default=list, blank=True)
-    nice_to_have     = JSONField(default=list, blank=True)
-    salary           = models.CharField(max_length=255, blank=True)
-    other            = models.TextField(blank=True)
+    STATUS_NONE         = 'none'
+    STATUS_TO_APPLY     = 'to_apply'
+    STATUS_APPLIED      = 'applied'
+    STATUS_IN_PROGRESS  = 'in_progress'
+    STATUS_GOT_RESPONSE = 'got_response'
+    STATUS_CHOICES = (
+        (STATUS_NONE,         '—'),
+        (STATUS_TO_APPLY,     'To apply'),
+        (STATUS_APPLIED,      'Applied'),
+        (STATUS_IN_PROGRESS,  'In progress'),
+        (STATUS_GOT_RESPONSE, 'Got response'),
+    )
+
+    id                 = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company            = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='jobs')
+    title              = models.CharField(max_length=500, blank=True)
+    location           = models.CharField(max_length=255, blank=True)
+    employment_type    = models.CharField(max_length=100, blank=True)
+    experience_level   = models.CharField(max_length=100, blank=True)
+    summary            = models.TextField(blank=True)
+    description        = models.TextField(blank=True)
+    responsibilities   = JSONField(default=list, blank=True)
+    requirements       = JSONField(default=list, blank=True)
+    nice_to_have       = JSONField(default=list, blank=True)
+    salary             = models.CharField(max_length=255, blank=True)
+    other              = models.TextField(blank=True)
     # source: URL string if imported from URL, "file" or "text" otherwise
-    source           = models.CharField(max_length=2048, blank=True)
+    source             = models.CharField(max_length=2048, blank=True)
     # source_file_path: relative to user data dir, e.g. "jobs/<uuid>.pdf"
-    source_file_path = models.CharField(max_length=500, blank=True)
-    added_at         = models.DateTimeField(auto_now_add=True)
-    archived         = models.BooleanField(default=False)
+    source_file_path   = models.CharField(max_length=500, blank=True)
+    added_at           = models.DateTimeField(auto_now_add=True)
+    archived           = models.BooleanField(default=False)
+    status             = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_NONE)
+    status_updated_at  = models.DateTimeField(null=True, blank=True)
+    applied_at         = models.DateTimeField(null=True, blank=True)
+    notes              = models.TextField(blank=True)
 
     def __str__(self):
         return f'{self.title} @ {self.company}'

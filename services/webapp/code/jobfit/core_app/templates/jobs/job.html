@@ -25,6 +25,9 @@
           {% endif %}
           {% if job.salary and job.salary != 'null' %}<span class="badge bg-light text-dark border px-3 py-2">&#128176; {{ job.salary }}</span>{% endif %}
           <span class="badge badge-date px-3 py-2">{{ job.added_at|datefmt }}</span>
+          {% if job.status and job.status != 'none' %}
+          <span class="badge {{ job.status|status_css }} px-3 py-2">{{ job.status|status_label }}</span>
+          {% endif %}
         </div>
       </div>
       <div class="d-flex gap-2 ms-lg-3 flex-shrink-0 align-items-start flex-wrap mt-2 mt-lg-0 btn-sm-on-mobile">
@@ -133,7 +136,7 @@
   </div>
   <div class="col-lg-4 order-1 order-lg-2">
 
-    <div class="card shadow-sm mb-0">
+    <div class="card shadow-sm mb-4">
       <div class="card-body">
         <div class="section-title">CV Match</div>
         {% if job.score %}
@@ -224,6 +227,36 @@
           </div>
         </div>
         {% endif %}
+      </div>
+    </div>
+
+    <div class="card shadow-sm mb-0">
+      <div class="card-body">
+        <div class="section-title">Tracking</div>
+        <form action="{% url 'jobs_save_tracking' company.slug job.id %}" method="post" class="m-0">
+          {% csrf_token %}
+          <label class="form-label small text-muted mb-1">Status</label>
+          <select name="status" class="form-select form-select-sm mb-1">
+            {% for value, label in status_choices %}
+            <option value="{{ value }}" {% if job.status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          {% if job.status != 'none' %}
+          <div class="small text-muted mb-3">
+            {% if job.applied_at %}Applied {{ job.applied_at|datefmt }}{% if job.status_updated_at and job.status != 'applied' %} &middot; {% endif %}{% endif %}
+            {% if job.status_updated_at and job.status != 'applied' %}Updated {{ job.status_updated_at|datefmt }}{% endif %}
+          </div>
+          {% else %}
+          <div class="mb-3"></div>
+          {% endif %}
+
+          <label class="form-label small text-muted mb-1">Notes</label>
+          <textarea name="notes" rows="4" class="form-control form-control-sm" placeholder="Private notes for this role…">{{ job.notes }}</textarea>
+
+          <div class="d-flex justify-content-end mt-2">
+            <button type="submit" class="btn btn-sm btn-outline-primary">Save</button>
+          </div>
+        </form>
       </div>
     </div>
 

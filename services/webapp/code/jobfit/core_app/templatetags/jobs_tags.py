@@ -31,6 +31,33 @@ def pretty_field(value):
     return str(value).replace('_', ' ').title()
 
 
+STATUS_LABELS = {
+    'none':         '—',
+    'to_apply':     'To apply',
+    'applied':      'Applied',
+    'in_progress':  'In progress',
+    'got_response': 'Got response',
+}
+
+STATUS_CSS = {
+    'none':         'status-none',
+    'to_apply':     'status-to-apply',
+    'applied':      'status-applied',
+    'in_progress':  'status-in-progress',
+    'got_response': 'status-got-response',
+}
+
+
+@register.filter
+def status_label(value):
+    return STATUS_LABELS.get(value, '—')
+
+
+@register.filter
+def status_css(value):
+    return STATUS_CSS.get(value, 'status-none')
+
+
 @register.filter
 def datefmt(value):
     """Format a datetime object or ISO string to '1 Jan 2025'."""

@@ -60,6 +60,9 @@ urlpatterns = [
     path('jobs/score/<slug:company_slug>/<uuid:job_id>/', jobs_views.score_one,     name='jobs_score_one'),
     path('jobs/known-fit/<slug:company_slug>/<uuid:job_id>/', jobs_views.toggle_known_fit, name='jobs_toggle_known_fit'),
 
+    # Jobs app — job tracking (status + notes)
+    path('jobs/tracking/<slug:company_slug>/<uuid:job_id>/', jobs_views.save_job_tracking, name='jobs_save_tracking'),
+
     # Jobs app — archive / delete (before generic company routes)
     path('jobs/delete/<slug:company_slug>/<uuid:job_id>/',    jobs_views.delete_job,        name='jobs_delete'),
     path('jobs/archive/<slug:company_slug>/<uuid:job_id>/',   jobs_views.archive_job,       name='jobs_archive_job'),
