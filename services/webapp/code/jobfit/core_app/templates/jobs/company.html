@@ -26,7 +26,7 @@
       <div class="w-100 d-md-none"></div>
       <div class="d-flex gap-2 flex-wrap">
         <button class="btn btn-sm btn-outline-primary" {% if not can_score %}disabled{% endif %}
-                title="{% if not has_openai_key %}Requires OpenAI key{% elif not cv_uploaded %}Upload a CV to enable scoring{% endif %}"
+                title="{% if not has_llm_key %}Requires API key{% elif not cv_uploaded %}Upload a CV to enable scoring{% endif %}"
                 onclick="scoreAll('{{ company.slug }}')">Score all vs CV</button>
         <form action="{% url 'jobs_score_clear' company.slug %}" method="post" class="m-0">
           {% csrf_token %}
@@ -84,7 +84,7 @@
         <form action="{% url 'jobs_score_one' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-sm btn-outline-secondary" {% if not can_score %}disabled{% endif %}
-                  title="{% if not has_openai_key %}Requires OpenAI key{% elif not cv_uploaded %}Upload a CV{% endif %}">
+                  title="{% if not has_llm_key %}Requires API key{% elif not cv_uploaded %}Upload a CV{% endif %}">
             {% if job.score %}Re-score{% else %}Score{% endif %}
           </button>
         </form>

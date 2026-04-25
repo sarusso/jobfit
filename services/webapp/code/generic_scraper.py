@@ -148,17 +148,24 @@ class GenericScraper(BaseScraper):
             page_html = current_html if current_html else _rendered_html(current_url, timeout_ms=timeout_ms)
             current_html = None  # subsequent pages always fetched
 
-            response = self._openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                response_format={"type": "json_object"},
-                messages=[{"role": "user", "content": _make_prompt(current_url, page_html)}],
-                temperature=0,
-                seed=42,
-                timeout=getattr(self, "_openai_timeout", 300),
-            )
-            self._fetch_usage["prompt_tokens"]     += response.usage.prompt_tokens
-            self._fetch_usage["completion_tokens"] += response.usage.completion_tokens
-            data = json.loads(response.choices[0].message.content)
+            prompt = _make_prompt(current_url, page_html)
+            timeout = getattr(self, "_openai_timeout", 300)
+            if hasattr(self._llm_provider, 'complete_json'):
+                data, usage = self._llm_provider.complete_json(prompt, model_tier="cheap", timeout=timeout)
+                self._fetch_usage["prompt_tokens"]     += usage.prompt_tokens
+                self._fetch_usage["completion_tokens"] += usage.completion_tokens
+            else:
+                response = self._llm_provider.chat.completions.create(
+                    model="gpt-4o-mini",
+                    response_format={"type": "json_object"},
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0,
+                    seed=42,
+                    timeout=timeout,
+                )
+                self._fetch_usage["prompt_tokens"]     += response.usage.prompt_tokens
+                self._fetch_usage["completion_tokens"] += response.usage.completion_tokens
+                data = json.loads(response.choices[0].message.content)
             log.debug("fetch_jobs page=%s response:\n%s", current_url, json.dumps(data, indent=2, ensure_ascii=False))
 
             if not top_company:

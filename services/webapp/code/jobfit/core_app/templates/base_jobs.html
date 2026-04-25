@@ -302,9 +302,9 @@
               <h5 class="modal-title mb-0" id="addJobsModalLabel">Add Jobs</h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            {% if not has_openai_key %}
+            {% if not has_llm_key %}
             <div class="alert alert-warning small mb-2">
-              <strong>No OpenAI key configured.</strong> URL and text analysis require <code>OPENAI_KEY</code>.
+              <strong>No API key configured.</strong> URL and text analysis require an API key.
               Scraping will still save PDFs, but no structured JSON will be extracted.
             </div>
             {% endif %}
@@ -331,8 +331,8 @@
                   <label class="form-label fw-semibold">Job posting URL</label>
                   <input type="url" name="jd_url" class="form-control" placeholder="https://…">
                 </div>
-                <button type="submit" class="btn btn-primary" id="urlSubmit" {% if not has_openai_key %}disabled{% endif %}>Add job</button>
-                {% if not has_openai_key %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+                <button type="submit" class="btn btn-primary" id="urlSubmit" {% if not has_llm_key %}disabled{% endif %}>Add job</button>
+                {% if not has_llm_key %}<span class="text-muted small ms-2">Requires API key</span>{% endif %}
               </form>
             </div>
 
@@ -352,8 +352,8 @@
                   <label class="form-label fw-semibold">Job posting URL <span class="fw-normal text-muted small">(optional)</span></label>
                   <input type="url" name="jd_url" class="form-control" placeholder="https://…">
                 </div>
-                <button type="submit" class="btn btn-primary" id="fileSubmit" {% if not has_openai_key %}disabled{% endif %}>Add job</button>
-                {% if not has_openai_key %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+                <button type="submit" class="btn btn-primary" id="fileSubmit" {% if not has_llm_key %}disabled{% endif %}>Add job</button>
+                {% if not has_llm_key %}<span class="text-muted small ms-2">Requires API key</span>{% endif %}
               </form>
             </div>
 
@@ -373,8 +373,8 @@
                   <label class="form-label fw-semibold">Job posting URL <span class="fw-normal text-muted small">(optional)</span></label>
                   <input type="url" name="jd_url" class="form-control" placeholder="https://…">
                 </div>
-                <button type="submit" class="btn btn-primary" id="textSubmit" {% if not has_openai_key %}disabled{% endif %}>Add job</button>
-                {% if not has_openai_key %}<span class="text-muted small ms-2">Requires OpenAI key</span>{% endif %}
+                <button type="submit" class="btn btn-primary" id="textSubmit" {% if not has_llm_key %}disabled{% endif %}>Add job</button>
+                {% if not has_llm_key %}<span class="text-muted small ms-2">Requires API key</span>{% endif %}
               </form>
             </div>
 

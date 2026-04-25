@@ -207,7 +207,7 @@ def _get_or_create_company(user, name_raw: str, description: str = "") -> Compan
 
 
 # ------------------------------------------------------------------ #
-# OpenAI helpers                                                      #
+# LLM helpers                                                         #
 # ------------------------------------------------------------------ #
 
 _PROMPT_CV_INFERENCE = (
@@ -299,20 +299,17 @@ _JD_SCHEMA = {
 }
 
 
-def _openai_client():
-    api_key = settings.OPENAI_KEY
-    if not api_key:
-        return None
-    from openai import OpenAI
-    return OpenAI(api_key=api_key)
+def _get_llm_provider():
+    from .llm_provider import get_provider
+    return get_provider()
 
 
-def _do_score(user, job: Job, cv: CV, client, mode: str = "normal",
+def _do_score(user, job: Job, cv: CV, provider, mode: str = "normal",
               with_notes_text: str = "") -> dict:
-    """Call OpenAI to score a job against a CV. Returns the raw result dict."""
+    """Score a job against a CV via the LLM provider. Returns (result_dict, usage)."""
     data_dir = Path(settings.DATA_DIR) / user.username
     cv_file  = data_dir / cv.file_path
-    cv_b64   = base64.standard_b64encode(cv_file.read_bytes()).decode()
+    cv_bytes = cv_file.read_bytes()
 
     notes_section = (
         f"Additional context provided by the candidate (treat as authoritative):\n{with_notes_text}\n\n"
@@ -335,22 +332,10 @@ def _do_score(user, job: Job, cv: CV, client, mode: str = "normal",
         "Job description (JSON):\n"
         + json.dumps(job_dict, indent=2, ensure_ascii=False)
     )
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        response_format={"type": "json_object"},
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "file", "file": {"filename": "cv.pdf",
-                                          "file_data": f"data:application/pdf;base64,{cv_b64}"}},
-            ],
-        }],
-        temperature=0,
-        seed=42,
-        timeout=SCORE_TIMEOUT,
+    return provider.complete_json(
+        prompt, model_tier="expensive", pdf_bytes=cv_bytes,
+        pdf_filename="cv.pdf", timeout=SCORE_TIMEOUT,
     )
-    return json.loads(response.choices[0].message.content), response.usage
 
 
 def _save_score(job: Job, cv: CV, mode: str, result: dict,
@@ -368,8 +353,8 @@ def _save_score(job: Job, cv: CV, mode: str, result: dict,
     return score
 
 
-def _extract_jobs_from_pdf_text(text: str, client, timeout: int = SCORE_TIMEOUT):
-    """Call LLM to extract all job postings from PDF text. Returns (jobs_list, usage)."""
+def _extract_jobs_from_pdf_text(text: str, provider, timeout: int = SCORE_TIMEOUT):
+    """Extract all job postings from PDF text via LLM. Returns (jobs_list, usage)."""
     schema_item = dict(_JD_SCHEMA)
     prompt = (
         "The following text may contain one or more job postings extracted from a PDF. "
@@ -380,20 +365,12 @@ def _extract_jobs_from_pdf_text(text: str, client, timeout: int = SCORE_TIMEOUT)
         "Do NOT summarise or truncate the description field — copy it verbatim.\n\n"
         f"Text:\n\n{text[:80000]}"
     )
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        response_format={"type": "json_object"},
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        seed=42,
-        timeout=timeout,
-    )
-    result = json.loads(response.choices[0].message.content)
+    result, usage = provider.complete_json(prompt, model_tier="cheap", timeout=timeout)
     jobs = result if isinstance(result, list) else result.get("jobs", [])
-    return jobs, response.usage
+    return jobs, usage
 
 
-def _analyse_jd(text: str, client, url: str = "") -> dict:
+def _analyse_jd(text: str, provider, url: str = "") -> dict:
     schema = dict(_JD_SCHEMA)
     if url:
         schema["url"] = url
@@ -404,15 +381,7 @@ def _analyse_jd(text: str, client, url: str = "") -> dict:
         "Job posting text:\n\n"
         f"{text[:12000]}"
     )
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        response_format={"type": "json_object"},
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        seed=42,
-        timeout=SCORE_TIMEOUT,
-    )
-    return json.loads(response.choices[0].message.content), response.usage
+    return provider.complete_json(prompt, model_tier="cheap", timeout=SCORE_TIMEOUT)
 
 
 def _url_to_pdf_and_text(url: str):
@@ -694,9 +663,9 @@ def add_job_url(request):
         messages.warning(request, "Provide either a PDF/TXT file or a URL.")
         return _modal_add_jobs_redirect(request)
 
-    client = _openai_client()
-    if not client:
-        messages.warning(request, "OPENAI_KEY is not configured.")
+    provider = _get_llm_provider()
+    if not provider:
+        messages.warning(request, "No API key configured.")
         return _modal_add_jobs_redirect(request)
 
     if _get_balance(request.user) <= 0:
@@ -724,8 +693,8 @@ def add_job_url(request):
             messages.warning(request, "Could not load the URL. Try uploading a PDF or pasting the text instead.")
             return _modal_add_jobs_redirect(request)
 
-    job_data, llm_usage = _analyse_jd(jd_text, client, url=url)
-    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage, "Job import")
+    job_data, llm_usage = _analyse_jd(jd_text, provider, url=url)
+    _track_usage(request.user, provider.provider, provider.model_name("cheap"), llm_usage, "Job import")
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
         messages.warning(request, "The analysis returned no job content.")
         return _modal_add_jobs_redirect(request)
@@ -752,17 +721,17 @@ def add_job_text(request):
         messages.warning(request, "Job description text is required.")
         return _modal_add_jobs_redirect(request)
 
-    client = _openai_client()
-    if not client:
-        messages.warning(request, "OPENAI_KEY is not configured.")
+    provider = _get_llm_provider()
+    if not provider:
+        messages.warning(request, "No API key configured.")
         return _modal_add_jobs_redirect(request)
 
     if _get_balance(request.user) <= 0:
         messages.warning(request, "Your balance is negative. Please top up your account before adding jobs.")
         return _modal_add_jobs_redirect(request)
 
-    job_data, llm_usage = _analyse_jd(text, client, url=url)
-    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage, "Job import")
+    job_data, llm_usage = _analyse_jd(text, provider, url=url)
+    _track_usage(request.user, provider.provider, provider.model_name("cheap"), llm_usage, "Job import")
     if not job_data.get("title", "").strip() and not job_data.get("description", "").strip():
         messages.warning(request, "The analysis returned no job content.")
         return _modal_add_jobs_redirect(request)
@@ -793,9 +762,9 @@ def extract_pdf_jobs(request):
     if not pdf_file or not pdf_file.name.lower().endswith(".pdf"):
         return JsonResponse({"error": "Please upload a PDF file."}, status=400)
 
-    client = _openai_client()
-    if not client:
-        return JsonResponse({"error": "OPENAI_KEY is not configured."}, status=400)
+    provider = _get_llm_provider()
+    if not provider:
+        return JsonResponse({"error": "No API key configured."}, status=400)
 
     if _get_balance(request.user) <= 0:
         return JsonResponse({"error": "Your balance is negative. Please top up your account."}, status=402)
@@ -811,14 +780,14 @@ def extract_pdf_jobs(request):
     if not text:
         return JsonResponse({"error": "Could not extract any text from the PDF."}, status=400)
 
-    openai_timeout = int(request.POST.get("openai_timeout", 120) or 300)
+    llm_timeout = int(request.POST.get("openai_timeout", 120) or 300)
     try:
-        jobs, llm_usage = _extract_jobs_from_pdf_text(text, client, timeout=openai_timeout)
+        jobs, llm_usage = _extract_jobs_from_pdf_text(text, provider, timeout=llm_timeout)
     except Exception as e:
         log.error("PDF extraction failed: %s", e)
         return JsonResponse({"error": str(e)}, status=500)
 
-    _track_usage(request.user, "openai", "gpt-4o-mini", llm_usage, "Job import")
+    _track_usage(request.user, provider.provider, provider.model_name("cheap"), llm_usage, "Job import")
 
     stubs = [
         {
@@ -865,18 +834,18 @@ def scrape_categories(request):
         html_src = data.get("html_src", "").strip()
         if not url and not html_src:
             return JsonResponse({"error": "Enter the careers page URL or paste HTML source."}, status=400)
-        client = _openai_client()
-        if not client:
-            return JsonResponse({"error": "OPENAI_KEY is required for generic scraping."}, status=400)
+        provider = _get_llm_provider()
+        if not provider:
+            return JsonResponse({"error": "API key is required for generic scraping."}, status=400)
         base_url = url or "unknown"
         multi_company = bool(data.get("multi_company", False))
         try:
-            scraper = GenericScraper().setup(Path(settings.DATA_DIR), client,
+            scraper = GenericScraper().setup(Path(settings.DATA_DIR), provider,
                                              multi_company=multi_company)
             jobs = scraper.fetch_jobs(base_url, html_src=html_src or None)
             fetch_usage = getattr(scraper, "_fetch_usage", None)
             if fetch_usage:
-                _track_usage(request.user, "openai", "gpt-4o-mini", fetch_usage, "Job import")
+                _track_usage(request.user, provider.provider, provider.model_name("cheap"), fetch_usage, "Job import")
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
 
@@ -923,9 +892,9 @@ def scrape_stream(request):
     company_raw    = params.get("company", "").strip()
     jobs           = params.get("jobs", [])
     timeout        = params.get("timeout", 30)
-    openai_timeout = params.get("openai_timeout", 120)
+    llm_timeout    = params.get("openai_timeout", 120)
     multi_company  = params.get("multi_company", False)
-    client         = _openai_client()
+    provider       = _get_llm_provider()
     data_dir       = _data_dir(request)
     user           = request.user
 
@@ -987,8 +956,8 @@ def scrape_stream(request):
 
         if board == "lever":
             from lever_scraper import LeverScraper
-            scraper = LeverScraper().setup(data_dir, client, timeout=timeout,
-                                           openai_timeout=openai_timeout)
+            scraper = LeverScraper().setup(data_dir, provider, timeout=timeout,
+                                           openai_timeout=llm_timeout)
             scrape_jobs = []
             for j in jobs:
                 job_uuid = str(uuid_module.uuid4())
@@ -1002,8 +971,8 @@ def scrape_stream(request):
             display_name  = None
         else:
             from generic_scraper import GenericScraper
-            scraper = GenericScraper().setup(data_dir, client, timeout=timeout,
-                                             openai_timeout=openai_timeout,
+            scraper = GenericScraper().setup(data_dir, provider, timeout=timeout,
+                                             openai_timeout=llm_timeout,
                                              multi_company=multi_company)
             scrape_jobs = []
             for j in jobs:
@@ -1029,7 +998,7 @@ def scrape_stream(request):
                     break
                 llm_usage = event.get("llm_usage")
                 if llm_usage:
-                    _track_usage(user, "openai", "gpt-4o-mini", llm_usage, "Job import")
+                    _track_usage(user, provider.provider, provider.model_name("cheap"), llm_usage, "Job import")
                 job_data  = event.get("job_data") or {}
                 job_uuid  = event.get("uuid")
                 if job_data and job_uuid:
@@ -1092,9 +1061,9 @@ def score_one(request, company_slug, job_id):
     if not selected_cv:
         messages.warning(request, "No CV selected.")
         return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
-    client = _openai_client()
-    if not client:
-        messages.warning(request, "OPENAI_KEY is not configured.")
+    provider = _get_llm_provider()
+    if not provider:
+        messages.warning(request, "No API key configured.")
         return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("jobs_index")))
 
     if _get_balance(request.user) <= 0:
@@ -1104,8 +1073,8 @@ def score_one(request, company_slug, job_id):
     mode           = _current_mode(request)
     with_notes_txt = _get_notes_text(request) if _use_notes(request) else ""
 
-    result, llm_usage = _do_score(request.user, job, selected_cv, client, mode, with_notes_txt)
-    _track_usage(request.user, "openai", "gpt-4o", llm_usage, "CV scoring")
+    result, llm_usage = _do_score(request.user, job, selected_cv, provider, mode, with_notes_txt)
+    _track_usage(request.user, provider.provider, provider.model_name("expensive"), llm_usage, "CV scoring")
     _save_score(job, selected_cv, mode, result, with_notes_txt)
 
     return HttpResponseRedirect(request.META.get(
@@ -1119,9 +1088,9 @@ def score_company_stream(request, company_slug):
     selected_cv = _get_selected_cv(request)
     if not selected_cv:
         return HttpResponse("No CV selected", status=400)
-    client = _openai_client()
-    if not client:
-        return HttpResponse("OPENAI_KEY not set", status=400)
+    provider = _get_llm_provider()
+    if not provider:
+        return HttpResponse("No API key configured", status=400)
 
     mode           = _current_mode(request)
     with_notes_txt = _get_notes_text(request) if _use_notes(request) else ""
@@ -1145,8 +1114,8 @@ def score_company_stream(request, company_slug):
             last_error = None
             for attempt in range(1, MAX_RETRIES + 1):
                 try:
-                    result, llm_usage = _do_score(user, job, selected_cv, client, mode, with_notes_txt)
-                    _track_usage(user, "openai", "gpt-4o", llm_usage, "CV scoring")
+                    result, llm_usage = _do_score(user, job, selected_cv, provider, mode, with_notes_txt)
+                    _track_usage(user, provider.provider, provider.model_name("expensive"), llm_usage, "CV scoring")
                     _save_score(job, selected_cv, mode, result, with_notes_txt)
                     last_error = None
                     break

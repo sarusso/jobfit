@@ -160,7 +160,12 @@ class BaseScraper(ABC):
             "Job posting text:\n\n"
             f"{text[:12000]}"
         )
-        response = self._openai_client.chat.completions.create(
+        if hasattr(self._llm_provider, 'complete_json'):
+            return self._llm_provider.complete_json(
+                prompt, model_tier="cheap",
+                timeout=getattr(self, "_openai_timeout", 300),
+            )
+        response = self._llm_provider.chat.completions.create(
             model="gpt-4o-mini",
             response_format={"type": "json_object"},
             messages=[{"role": "user", "content": prompt}],
@@ -198,10 +203,10 @@ class BaseScraper(ABC):
     # Web / programmatic interface                                         #
     # ------------------------------------------------------------------ #
 
-    def setup(self, data_dir: Path, openai_client=None, timeout: int = 30, openai_timeout: int = 300, multi_company: bool = False) -> "BaseScraper":
+    def setup(self, data_dir: Path, llm_provider=None, timeout: int = 30, openai_timeout: int = 300, multi_company: bool = False) -> "BaseScraper":
         """Configure the scraper for use as a module (instead of via CLI)."""
         self._data_dir = data_dir
-        self._openai_client = openai_client
+        self._llm_provider = llm_provider
         self._timeout = timeout
         self._openai_timeout = openai_timeout
         self._multi_company = multi_company
@@ -247,7 +252,7 @@ class BaseScraper(ABC):
                         pdf_dest.parent.mkdir(parents=True, exist_ok=True)
                         page_text = self.render_to_pdf(url, pdf_dest, page)
                         job = None
-                        if self._openai_client:
+                        if self._llm_provider:
                             try:
                                 job, llm_usage = self.analyse_job(page_text, url)
                                 event["title"] = job.get("title") or event["title"]
@@ -277,7 +282,7 @@ class BaseScraper(ABC):
                             pdf_tmp = Path(tmp.name)
                         page_text = self.render_to_pdf(url, pdf_tmp, page)
                         job = None
-                        if self._openai_client:
+                        if self._llm_provider:
                             try:
                                 job, _ = self.analyse_job(page_text, url)
                                 event["title"] = job.get("title") or event["title"]
@@ -350,7 +355,7 @@ class BaseScraper(ABC):
         self._data_dir = Path(args.data_dir)
         self._timeout = args.timeout
         self._openai_timeout = args.openai_timeout
-        self._openai_client = None
+        self._llm_provider = None
 
         api_key = _load_config().get("OPENAI_KEY")
         if api_key:
@@ -359,7 +364,7 @@ class BaseScraper(ABC):
             except ImportError:
                 print("WARNING: openai package not installed — JSON analysis disabled. Run: pip install openai")
             else:
-                self._openai_client = OpenAI(api_key=api_key)
+                self._llm_provider = OpenAI(api_key=api_key)
 
         base_url = self.get_base_url(args)
         company  = self.get_company_name(args)

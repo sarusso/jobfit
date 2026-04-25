@@ -29,7 +29,8 @@ def jobs_context(request):
     except Notes.DoesNotExist:
         candidate_notes = ""
 
-    has_openai_key = bool(settings.OPENAI_KEY)
+    from .llm_provider import get_provider
+    has_llm_key = get_provider() is not None
 
     existing_companies = list(
         Company.objects.filter(user=request.user, archived=False)
@@ -41,8 +42,8 @@ def jobs_context(request):
     return {
         "cv_uploaded":        selected_cv is not None,
         "all_cvs":            all_cvs,
-        "has_openai_key":     has_openai_key,
-        "can_score":          selected_cv is not None and has_openai_key,
+        "has_llm_key":     has_llm_key,
+        "can_score":          selected_cv is not None and has_llm_key,
         "scoring_mode":       profile.scoring_mode or "normal",
         "use_notes":          profile.use_notes,
         "existing_companies": existing_companies,

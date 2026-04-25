@@ -87,8 +87,10 @@ CONTACT_EMAIL    = os.environ.get('CONTACT_EMAIL', 'contact@jobfit.fyi')
 INVITATION_CODE  = os.environ.get('INVITATION_CODE', None)
 
 # Jobs app settings
-DATA_DIR   = os.environ.get('DATA_DIR',   os.path.join(BASE_DIR, '../../data'))
-OPENAI_KEY = os.environ.get('OPENAI_KEY', None)
+DATA_DIR       = os.environ.get('DATA_DIR',       os.path.join(BASE_DIR, '../../data'))
+OPENAI_KEY     = os.environ.get('OPENAI_KEY',     None)
+ANTHROPIC_KEY  = os.environ.get('ANTHROPIC_KEY',  None)
+LLM_PROVIDER   = os.environ.get('LLM_PROVIDER',   'openai')  # "openai" or "anthropic"
 
 try:
     TERMS_VERSION = float(os.environ.get('TERMS_VERSION', 1.0))

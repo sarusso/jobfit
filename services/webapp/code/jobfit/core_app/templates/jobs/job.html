@@ -31,7 +31,7 @@
         <form action="{% url 'jobs_score_one' company.slug job.id %}" method="post" class="m-0">
           {% csrf_token %}
           <button class="btn btn-outline-primary" {% if not can_score %}disabled{% endif %}
-                  title="{% if not has_openai_key %}Requires OpenAI key{% elif not cv_uploaded %}Upload a CV to enable scoring{% endif %}">
+                  title="{% if not has_llm_key %}Requires API key{% elif not cv_uploaded %}Upload a CV to enable scoring{% endif %}">
             {% if job.score %}Re-score vs CV{% else %}Score vs CV{% endif %}
           </button>
         </form>
