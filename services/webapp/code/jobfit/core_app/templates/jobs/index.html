@@ -20,12 +20,19 @@
             <option value="in_progress">In progress</option>
             <option value="got_response">Got response</option>
           </select>
+          <select id="sort-select" class="form-select form-select-sm mt-2">
+            <option value="name-asc">Name A→Z</option>
+            <option value="score-desc">Score ↓</option>
+            <option value="latest-desc">Last job added ↓</option>
+          </select>
         </div>
         <div class="list-group list-group-flush flex-grow-1" id="company-list" style="overflow-y: auto; min-height: 0;">
           {% for company in active_companies %}
           <a href="{% url 'jobs_company' company.slug %}"
              class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 company-link{% if company.status_counts.none %} has-none{% endif %}{% if company.status_counts.to_apply %} has-to_apply{% endif %}{% if company.status_counts.applied %} has-applied{% endif %}{% if company.status_counts.in_progress %} has-in_progress{% endif %}{% if company.status_counts.got_response %} has-got_response{% endif %}"
-             data-name="{{ company.name|lower }}">
+             data-name="{{ company.name|lower }}"
+             data-score="{{ company.top_score|default_if_none:"-1" }}"
+             data-latest="{{ company.latest_added_at|date:"c" }}">
             <span class="company-label text-truncate me-2">
               {{ company.name }}
             </span>
@@ -58,9 +65,12 @@
       </span>
     </h2>
 
+    <div id="active-list">
     {% for company in active_companies %}
     <div class="card mb-3 shadow-sm job-card position-relative company-card{% if company.status_counts.none %} has-none{% endif %}{% if company.status_counts.to_apply %} has-to_apply{% endif %}{% if company.status_counts.applied %} has-applied{% endif %}{% if company.status_counts.in_progress %} has-in_progress{% endif %}{% if company.status_counts.got_response %} has-got_response{% endif %}"
-         data-name="{{ company.name|lower }}">
+         data-name="{{ company.name|lower }}"
+         data-score="{{ company.top_score|default_if_none:"-1" }}"
+         data-latest="{{ company.latest_added_at|date:"c" }}">
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-start">
           <div class="flex-grow-1 me-3">
@@ -99,6 +109,7 @@
     {% empty %}
     <div class="alert alert-info">No jobs found yet. Use the <strong>✚ Jobs</strong> button to add your first job.</div>
     {% endfor %}
+    </div>
 
     {% if archived_companies %}
     <h6 class="text-muted mt-5 mb-3 border-bottom pb-2" id="archived-header">Archived</h6>
@@ -145,8 +156,27 @@
     }
   }
 
+  function applySort() {
+    const mode = document.getElementById('sort-select').value;
+    const cmp = (a, b) => {
+      if (mode === 'name-asc')    return (a.dataset.name||'').localeCompare(b.dataset.name||'');
+      if (mode === 'score-desc')  return (parseFloat(b.dataset.score)||-1) - (parseFloat(a.dataset.score)||-1);
+      if (mode === 'latest-desc') return (b.dataset.latest||'').localeCompare(a.dataset.latest||'');
+      return 0;
+    };
+    for (const id of ['company-list', 'active-list']) {
+      const c = document.getElementById(id);
+      if (!c) continue;
+      const items = [...c.children].filter(el => el.matches('.company-link, .company-card'));
+      items.sort(cmp);
+      items.forEach(el => c.appendChild(el));
+    }
+  }
+
   qEl.addEventListener('input',  applyFilters);
   sEl.addEventListener('change', applyFilters);
+  document.getElementById('sort-select').addEventListener('change', applySort);
+  applySort();
 })();
 </script>
 {% endblock %}

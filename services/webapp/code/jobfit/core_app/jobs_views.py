@@ -501,18 +501,24 @@ def index(request):
     for company in companies:
         jobs   = company.jobs.all()
         scored = []
+        latest = None
         status_counts = {Job.STATUS_NONE: 0, Job.STATUS_TO_APPLY: 0, Job.STATUS_APPLIED: 0,
                          Job.STATUS_IN_PROGRESS: 0, Job.STATUS_GOT_RESPONSE: 0}
         for job in jobs:
-            if not job.archived and selected_cv:
+            if job.archived:
+                continue
+            if selected_cv:
                 s = job.scores.filter(cv=selected_cv, mode=mode).first()
                 if s:
                     scored.append(s.score)
-            if not job.archived and job.status in status_counts:
+            if job.status in status_counts:
                 status_counts[job.status] += 1
+            if latest is None or job.added_at > latest:
+                latest = job.added_at
         company.top_score = max(scored) if scored else None
         company.status_counts = status_counts
         company.has_pipeline = any(v for k, v in status_counts.items() if k != Job.STATUS_NONE)
+        company.latest_added_at = latest
 
     active   = [c for c in companies if not c.archived]
     archived = [c for c in companies if c.archived]
