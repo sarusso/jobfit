@@ -8,9 +8,17 @@
   .tracker-col-body {
     max-height: calc(100vh - 14rem); overflow-y: auto;
     background: #f1f3f5;
+    transition: background .15s ease;
   }
-  .tracker-card { transition: box-shadow .15s ease, transform .15s ease; }
+  .tracker-col-body.drag-over { background: #e2e8f0; outline: 2px dashed #adb5bd; outline-offset: -4px; }
+  .tracker-card {
+    transition: box-shadow .15s ease, transform .15s ease, opacity .15s ease;
+    cursor: grab;
+  }
+  .tracker-card:active { cursor: grabbing; }
   .tracker-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.08); transform: translateY(-1px); }
+  .tracker-card.dragging { opacity: .4; }
+  .tracker-empty { color: #adb5bd; text-align: center; padding: 1rem 0; font-size: .85rem; }
 </style>
 
 <h2 class="mb-4">Tracker</h2>
@@ -21,34 +29,139 @@
     <div class="card shadow-sm">
       <div class="card-header py-2 d-flex justify-content-between align-items-center">
         <span class="badge {{ status_value|status_css }} fs-6">{{ status_label }}</span>
-        <span class="badge bg-secondary rounded-pill">{{ jobs|length }}</span>
+        <span class="badge bg-secondary rounded-pill" data-count-for="{{ status_value }}">{{ jobs|length }}</span>
       </div>
-      <div class="card-body p-2 d-flex flex-column gap-2 tracker-col-body">
+      <div class="card-body p-2 d-flex flex-column gap-2 tracker-col-body" data-status="{{ status_value }}">
         {% for job in jobs %}
-        <a href="{% url 'jobs_job' job.company.slug job.id %}"
-           class="text-decoration-none text-dark">
-          <div class="card border tracker-card">
-            <div class="card-body p-2">
-              <div class="text-muted small text-truncate" title="{{ job.company.name }}">{{ job.company.name }}</div>
-              <div class="fw-semibold small mb-1">{{ job.title|default:"—" }}</div>
-              <div class="d-flex flex-wrap gap-1 align-items-center">
-                {% if job.score %}{% score_badge job.score %}{% endif %}
-                {% if job.location %}<span class="badge badge-loc">{{ job.location }}</span>{% endif %}
-              </div>
-              {% if job.applied_at %}
-              <div class="text-muted mt-1" style="font-size:.7rem">Applied {{ job.applied_at|datefmt }}</div>
-              {% elif job.status_updated_at %}
-              <div class="text-muted mt-1" style="font-size:.7rem">Updated {{ job.status_updated_at|datefmt }}</div>
-              {% endif %}
+        <div class="card border tracker-card"
+             draggable="true"
+             data-job-id="{{ job.id }}"
+             data-company-slug="{{ job.company.slug }}"
+             data-status="{{ job.status }}"
+             data-href="{% url 'jobs_job' job.company.slug job.id %}">
+          <div class="card-body p-2">
+            <div class="text-muted small text-truncate" title="{{ job.company.name }}">{{ job.company.name }}</div>
+            <div class="fw-semibold small mb-1">{{ job.title|default:"—" }}</div>
+            <div class="d-flex flex-wrap gap-1 align-items-center">
+              {% if job.score %}{% score_badge job.score %}{% endif %}
+              {% if job.location %}<span class="badge badge-loc">{{ job.location }}</span>{% endif %}
             </div>
+            {% if job.applied_at %}
+            <div class="text-muted mt-1" style="font-size:.7rem">Applied {{ job.applied_at|datefmt }}</div>
+            {% elif job.status_updated_at %}
+            <div class="text-muted mt-1" style="font-size:.7rem">Updated {{ job.status_updated_at|datefmt }}</div>
+            {% endif %}
           </div>
-        </a>
-        {% empty %}
-        <div class="text-muted small text-center py-3">No jobs</div>
+        </div>
         {% endfor %}
+        <div class="tracker-empty" {% if jobs %}style="display:none"{% endif %}>No jobs</div>
       </div>
     </div>
   </div>
   {% endfor %}
 </div>
+
+<script>
+(function () {
+  const csrfToken = (document.cookie.split(';').find(c => c.trim().startsWith('csrftoken=')) || '').split('=')[1] || '';
+
+  let draggedCard = null;
+  let dragEnterCounters = new WeakMap();
+
+  function refreshColumn(colBody) {
+    const count = colBody.querySelectorAll('.tracker-card').length;
+    const status = colBody.dataset.status;
+    const badge = document.querySelector(`[data-count-for="${status}"]`);
+    if (badge) badge.textContent = count;
+    const empty = colBody.querySelector('.tracker-empty');
+    if (empty) empty.style.display = count === 0 ? '' : 'none';
+  }
+
+  function findColumnBody(el) {
+    return el.closest ? el.closest('.tracker-col-body') : null;
+  }
+
+  document.querySelectorAll('.tracker-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      // Suppressed automatically after a drag; only fires on real clicks
+      if (card.classList.contains('dragging')) return;
+      const href = card.dataset.href;
+      if (href) window.location = href;
+    });
+
+    card.addEventListener('dragstart', (e) => {
+      draggedCard = card;
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', card.dataset.jobId);
+    });
+
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      draggedCard = null;
+      document.querySelectorAll('.tracker-col-body.drag-over').forEach(c => c.classList.remove('drag-over'));
+      dragEnterCounters = new WeakMap();
+    });
+  });
+
+  document.querySelectorAll('.tracker-col-body').forEach(col => {
+    col.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      const n = (dragEnterCounters.get(col) || 0) + 1;
+      dragEnterCounters.set(col, n);
+      col.classList.add('drag-over');
+    });
+    col.addEventListener('dragleave', (e) => {
+      const n = (dragEnterCounters.get(col) || 0) - 1;
+      dragEnterCounters.set(col, n);
+      if (n <= 0) col.classList.remove('drag-over');
+    });
+    col.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+    });
+    col.addEventListener('drop', (e) => {
+      e.preventDefault();
+      col.classList.remove('drag-over');
+      dragEnterCounters.set(col, 0);
+      if (!draggedCard) return;
+      const newStatus = col.dataset.status;
+      const oldStatus = draggedCard.dataset.status;
+      const fromCol = findColumnBody(draggedCard);
+      if (newStatus === oldStatus) return;
+
+      // Optimistic move
+      const empty = col.querySelector('.tracker-empty');
+      if (empty) empty.style.display = 'none';
+      col.insertBefore(draggedCard, empty || null);
+      draggedCard.dataset.status = newStatus;
+      if (fromCol) refreshColumn(fromCol);
+      refreshColumn(col);
+
+      const slug = draggedCard.dataset.companySlug;
+      const jobId = draggedCard.dataset.jobId;
+      const fd = new FormData();
+      fd.append('status', newStatus);
+      fd.append('csrfmiddlewaretoken', csrfToken);
+      fetch(`/jobs/tracking/${slug}/${jobId}/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': csrfToken, 'X-Requested-With': 'fetch'},
+        body: fd,
+      }).then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      }).catch(err => {
+        // Roll back on failure
+        if (fromCol) {
+          fromCol.appendChild(draggedCard);
+          draggedCard.dataset.status = oldStatus;
+          refreshColumn(fromCol);
+          refreshColumn(col);
+        }
+        alert('Failed to update status: ' + err.message);
+      });
+    });
+  });
+})();
+</script>
 {% endblock %}

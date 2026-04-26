@@ -1218,7 +1218,7 @@ def save_job_tracking(request, company_slug, job_id):
     if new_status not in valid:
         new_status = Job.STATUS_NONE
 
-    update_fields = ["notes"]
+    update_fields = []
     if new_status != job.status:
         job.status = new_status
         job.status_updated_at = timezone.now()
@@ -1227,8 +1227,17 @@ def save_job_tracking(request, company_slug, job_id):
             job.applied_at = timezone.now()
             update_fields.append("applied_at")
 
-    job.notes = request.POST.get("notes", "")
-    job.save(update_fields=update_fields)
+    if "notes" in request.POST:
+        job.notes = request.POST.get("notes", "")
+        update_fields.append("notes")
+
+    if update_fields:
+        job.save(update_fields=update_fields)
+
+    if request.headers.get("X-Requested-With") == "fetch":
+        return JsonResponse({"ok": True, "status": job.status,
+                             "applied_at": job.applied_at.isoformat() if job.applied_at else None,
+                             "status_updated_at": job.status_updated_at.isoformat() if job.status_updated_at else None})
 
     return HttpResponseRedirect(request.META.get(
         "HTTP_REFERER", reverse("jobs_job", args=[company_slug, str(job.id)])
