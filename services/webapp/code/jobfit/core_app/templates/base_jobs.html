@@ -332,7 +332,7 @@
                 {% csrf_token %}
                 <div class="mb-3">
                   <label class="form-label fw-semibold">Company</label>
-                  <input type="text" name="company" class="form-control" list="company-datalist" placeholder="auto-detect" autocomplete="off">
+                  <input type="text" name="company" class="form-control company-autosuggest" placeholder="auto-detect" autocomplete="off">
                 </div>
                 <div class="mb-4">
                   <label class="form-label fw-semibold">Job posting URL</label>
@@ -349,7 +349,7 @@
                 {% csrf_token %}
                 <div class="mb-3">
                   <label class="form-label fw-semibold">Company</label>
-                  <input type="text" name="company" class="form-control" list="company-datalist" placeholder="auto-detect" autocomplete="off">
+                  <input type="text" name="company" class="form-control company-autosuggest" placeholder="auto-detect" autocomplete="off">
                 </div>
                 <div class="mb-3">
                   <label class="form-label fw-semibold">Upload file <span class="fw-normal text-muted small">(PDF or TXT)</span></label>
@@ -370,7 +370,7 @@
                 {% csrf_token %}
                 <div class="mb-3">
                   <label class="form-label fw-semibold">Company</label>
-                  <input type="text" name="company" class="form-control" list="company-datalist" placeholder="auto-detect" autocomplete="off">
+                  <input type="text" name="company" class="form-control company-autosuggest" placeholder="auto-detect" autocomplete="off">
                 </div>
                 <div class="mb-3">
                   <label class="form-label fw-semibold">Job description</label>
@@ -491,9 +491,7 @@
             </div>{# end tab-scrape #}
           </div>{# end tab-content #}
 
-          <datalist id="company-datalist">
-            {% for c in existing_companies %}<option value="{{ c }}">{% endfor %}
-          </datalist>
+          {{ existing_companies|json_script:"company-data" }}
         </div>{# end modal-body #}
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -523,6 +521,78 @@
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing…';
       });
     });
+
+    (function setupCompanyAutosuggest() {
+      const dataEl = document.getElementById('company-data');
+      if (!dataEl) return;
+      let items = [];
+      try { items = JSON.parse(dataEl.textContent) || []; } catch (e) { return; }
+
+      const MAX = 8;
+
+      document.querySelectorAll('input.company-autosuggest').forEach(input => {
+        const wrapper = document.createElement('div');
+        wrapper.style.position = 'relative';
+        input.parentNode.insertBefore(wrapper, input);
+        wrapper.appendChild(input);
+
+        const menu = document.createElement('ul');
+        menu.className = 'dropdown-menu w-100';
+        menu.style.maxHeight = '240px';
+        menu.style.overflowY = 'auto';
+        wrapper.appendChild(menu);
+
+        let activeIdx = -1;
+        let lastMatches = [];
+
+        function getMatches() {
+          const q = input.value.toLowerCase().trim();
+          if (!q) return [];
+          return items.filter(c => c.toLowerCase().includes(q)).slice(0, MAX);
+        }
+        function render() {
+          menu.innerHTML = lastMatches.map((c, i) =>
+            `<li><button type="button" class="dropdown-item${i === activeIdx ? ' active' : ''}">${c.replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}</button></li>`
+          ).join('');
+        }
+        function show() {
+          lastMatches = getMatches();
+          if (!lastMatches.length) { hide(); return; }
+          render();
+          menu.classList.add('show');
+        }
+        function hide() {
+          menu.classList.remove('show');
+          activeIdx = -1;
+        }
+
+        input.addEventListener('input', () => { activeIdx = -1; show(); });
+        input.addEventListener('focus', () => { if (input.value.trim()) show(); });
+        input.addEventListener('blur',  () => setTimeout(hide, 150));
+        input.addEventListener('keydown', (e) => {
+          if (!lastMatches.length) return;
+          if (e.key === 'ArrowDown') {
+            activeIdx = (activeIdx + 1) % lastMatches.length;
+            render(); e.preventDefault();
+          } else if (e.key === 'ArrowUp') {
+            activeIdx = (activeIdx - 1 + lastMatches.length) % lastMatches.length;
+            render(); e.preventDefault();
+          } else if (e.key === 'Enter' && activeIdx >= 0) {
+            input.value = lastMatches[activeIdx];
+            hide(); e.preventDefault();
+          } else if (e.key === 'Escape') {
+            hide();
+          }
+        });
+        menu.addEventListener('mousedown', (e) => {
+          const btn = e.target.closest('button');
+          if (!btn) return;
+          e.preventDefault();
+          input.value = btn.textContent;
+          hide();
+        });
+      });
+    })();
 
     let _baseUrl = '';
     let _allJobs = [];
