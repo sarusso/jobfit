@@ -3,6 +3,17 @@
 {% block title %}JobFit - Companies{% endblock %}
 
 {% block content %}
+<style>
+  /* Match icon-button borders to form-control's lighter border */
+  .input-group .btn-outline-secondary {
+    border-color: var(--bs-border-color);
+    color: #6c757d;
+  }
+  .input-group .btn-outline-secondary:hover:not(.active) {
+    background-color: #f8f9fa;
+    color: #495057;
+  }
+</style>
 <div class="row g-4">
 
   {# ── Left sidebar ── #}
@@ -10,21 +21,44 @@
     <div class="sticky-top pt-1" style="top: 1rem;">
       <div class="card shadow-sm d-flex flex-column" style="max-height: calc(100vh - 8rem);">
         <div class="card-header py-2 flex-shrink-0">
-          <input id="company-filter" type="search" class="form-control form-control-sm mb-2"
-                 placeholder="Filter companies…" autocomplete="off">
-          <select id="status-filter" class="form-select form-select-sm">
-            <option value="all">All</option>
-            <option value="none">Unsorted</option>
-            <option value="to_apply">To apply</option>
-            <option value="applied">Applied</option>
-            <option value="in_progress">In progress</option>
-            <option value="got_response">Got response</option>
-          </select>
-          <select id="sort-select" class="form-select form-select-sm mt-2">
-            <option value="name-asc">Name A→Z</option>
-            <option value="score-desc">Score ↓</option>
-            <option value="latest-desc">Last job added ↓</option>
-          </select>
+          <div class="input-group input-group-sm">
+            <input id="company-filter" type="search" class="form-control"
+                   placeholder="Filter…" autocomplete="off">
+
+            <button id="status-btn" type="button"
+                    class="btn btn-outline-secondary px-2"
+                    data-bs-toggle="dropdown" data-bs-auto-close="true"
+                    aria-expanded="false" data-value="all"
+                    title="Status: All">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5zm1 .5v1.293l4.354 4.853A.5.5 0 0 1 7 8.5v5.305l2-.667V8.5a.5.5 0 0 1 .146-.354L13.5 3.293V2z"/>
+              </svg>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="status-btn">
+              <li><button type="button" class="dropdown-item" data-value="all">All</button></li>
+              <li><button type="button" class="dropdown-item" data-value="none">Unsorted</button></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><button type="button" class="dropdown-item" data-value="to_apply">To apply</button></li>
+              <li><button type="button" class="dropdown-item" data-value="applied">Applied</button></li>
+              <li><button type="button" class="dropdown-item" data-value="in_progress">In progress</button></li>
+              <li><button type="button" class="dropdown-item" data-value="got_response">Got response</button></li>
+            </ul>
+
+            <button id="sort-btn" type="button"
+                    class="btn btn-outline-secondary px-2"
+                    data-bs-toggle="dropdown" data-bs-auto-close="true"
+                    aria-expanded="false" data-value="name-asc"
+                    title="Sort: Name A→Z">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M3.5 3.5a.5.5 0 0 0-1 0v8.793l-1.146-1.147a.5.5 0 0 0-.708.708l2 2a.5.5 0 0 0 .708 0l2-2a.5.5 0 0 0-.708-.708L3.5 12.293zM7 9.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m0-3a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5m0-3a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5M7 12.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5"/>
+              </svg>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="sort-btn">
+              <li><button type="button" class="dropdown-item" data-value="name-asc">Name A→Z</button></li>
+              <li><button type="button" class="dropdown-item" data-value="score-desc">Score ↓</button></li>
+              <li><button type="button" class="dropdown-item" data-value="latest-desc">Last job added ↓</button></li>
+            </ul>
+          </div>
         </div>
         <div class="list-group list-group-flush flex-grow-1" id="company-list" style="overflow-y: auto; min-height: 0;">
           {% for company in active_companies %}
@@ -139,12 +173,13 @@
 <script>
 (function () {
   const qEl = document.getElementById('company-filter');
-  const sEl = document.getElementById('status-filter');
+  const statusBtn = document.getElementById('status-btn');
+  const sortBtn   = document.getElementById('sort-btn');
   const archivedHeader = document.getElementById('archived-header');
 
   function applyFilters() {
     const q = (qEl.value || '').toLowerCase().trim();
-    const want = sEl.value;
+    const want = statusBtn.dataset.value || 'all';
     document.querySelectorAll('.company-link, .company-card').forEach(el => {
       const nameMatch = (el.dataset.name || '').includes(q);
       const statusMatch = want === 'all' || el.classList.contains('has-' + want);
@@ -157,7 +192,7 @@
   }
 
   function applySort() {
-    const mode = document.getElementById('sort-select').value;
+    const mode = sortBtn.dataset.value || 'name-asc';
     const cmp = (a, b) => {
       if (mode === 'name-asc')    return (a.dataset.name||'').localeCompare(b.dataset.name||'');
       if (mode === 'score-desc')  return (parseFloat(b.dataset.score)||-1) - (parseFloat(a.dataset.score)||-1);
@@ -173,9 +208,26 @@
     }
   }
 
-  qEl.addEventListener('input',  applyFilters);
-  sEl.addEventListener('change', applyFilters);
-  document.getElementById('sort-select').addEventListener('change', applySort);
+  function bindDropdown(btn, defaultValue, labelPrefix, onChange) {
+    const menu = btn.nextElementSibling;
+    menu.addEventListener('click', (e) => {
+      const item = e.target.closest('button[data-value]');
+      if (!item) return;
+      const value = item.dataset.value;
+      btn.dataset.value = value;
+      btn.title = `${labelPrefix}: ${item.textContent.trim()}`;
+      btn.classList.toggle('active', value !== defaultValue);
+      // Close the menu
+      const dd = bootstrap.Dropdown.getInstance(btn);
+      if (dd) dd.hide();
+      onChange();
+    });
+  }
+
+  bindDropdown(statusBtn, 'all',      'Status', applyFilters);
+  bindDropdown(sortBtn,   'name-asc', 'Sort',   applySort);
+
+  qEl.addEventListener('input', applyFilters);
   applySort();
 })();
 </script>
