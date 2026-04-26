@@ -566,6 +566,35 @@ def job_view(request, company_slug, job_id):
 
 
 @private_view
+def tracker(request):
+    mode        = _current_mode(request)
+    selected_cv = _get_selected_cv(request)
+
+    columns_order = [
+        Job.STATUS_TO_APPLY,
+        Job.STATUS_APPLIED,
+        Job.STATUS_IN_PROGRESS,
+        Job.STATUS_GOT_RESPONSE,
+    ]
+    by_status: dict[str, list] = {s: [] for s in columns_order}
+
+    jobs = (Job.objects
+            .filter(company__user=request.user, archived=False,
+                    company__archived=False, status__in=columns_order)
+            .select_related('company')
+            .prefetch_related('scores')
+            .order_by('-status_updated_at', '-added_at'))
+
+    for job in jobs:
+        job.score = job.scores.filter(cv=selected_cv, mode=mode).first() if selected_cv else None
+        by_status[job.status].append(job)
+
+    labels = dict(Job.STATUS_CHOICES)
+    columns = [(s, labels[s], by_status[s]) for s in columns_order]
+    return render(request, "jobs/tracker.html", {"columns": columns})
+
+
+@private_view
 def job_pdf(request, company_slug, job_id):
     company = get_object_or_404(Company, user=request.user, slug=company_slug)
     job     = get_object_or_404(Job, company=company, id=job_id)

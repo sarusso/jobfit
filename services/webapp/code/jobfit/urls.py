@@ -72,6 +72,7 @@ urlpatterns = [
 
     # Jobs app — browsing
     path('help/',                                               jobs_views.help_page,    name='jobs_help'),
+    path('jobs/tracker/',                                       jobs_views.tracker,      name='jobs_tracker'),
     path('jobs/',                                               jobs_views.index,        name='jobs_index'),
     path('jobs/<slug:company_slug>/<uuid:job_id>/pdf/',         jobs_views.job_pdf,      name='jobs_job_pdf'),
     path('jobs/<slug:company_slug>/<uuid:job_id>/',             jobs_views.job_view,     name='jobs_job'),
